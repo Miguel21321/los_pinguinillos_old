@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Picos Unidos — Edición Modular</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" async></script>
+</head>
+<body>
+
+  <canvas id="gameCanvas"></canvas>
+  <div id="saveToast">💾 Progreso guardado</div>
+
+  <!-- HUD SUPERIOR COMPACTO -->
+  <div id="hud">
+    <div class="hud-left">
+      <div class="hud-pill">
+        <div class="stat"><small>NIVEL</small> <span id="hudLevel">1</span></div>
+        <div class="sep"></div>
+        <div class="stat"><small>🚩 CP</small> <span id="hudCP">1/4</span></div>
+        <div class="sep"></div>
+        <div class="stat"><small>⏱</small> <span id="hudTime">00:00.0</span></div>
+        <div class="sep"></div>
+        <div class="stat"><small>💥</small> <span id="hudFalls">0</span></div>
+      </div>
+
+      <div class="hud-pill">
+        <div class="stam-wrap" title="Resistencia Pingo (Azul)">
+          <span class="p-dot" style="background:var(--blue)">P1</span>
+          <div class="stam-bg"><div id="stam1" class="stam-fill" style="background:var(--blue)"></div></div>
+        </div>
+        <div class="stam-wrap" title="Resistencia Fredo (Naranja)">
+          <span class="p-dot" style="background:var(--orange)">P2</span>
+          <div class="stam-bg"><div id="stam2" class="stam-fill" style="background:var(--orange)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hud-right">
+      <button class="btn btn-icon" id="btnQuickMode" title="Alternar 2J / Solo">🎮 2J</button>
+      <button class="btn btn-icon" id="btnHudSave" title="Gestor de Partidas">💾</button>
+      <button class="btn btn-icon" id="btnTouch" title="Controles táctiles">📱</button>
+      <button class="btn btn-icon" id="btnMute" title="Sonido Sí/No">🔊</button>
+      <button class="btn btn-icon" id="btnFS" title="Pantalla Completa (Tecla F)">⛶</button>
+      <button class="btn" id="btnPause">⏸ Pausa</button>
+    </div>
+  </div>
+
+  <!-- CONTROLES TÁCTILES PARA MÓVIL -->
+  <div id="touchControls" class="hidden">
+    <div class="t-group">
+      <button class="t-btn" id="tLeft">◀</button>
+      <button class="t-btn" id="tRight">▶</button>
+    </div>
+    <div class="t-group">
+      <button class="t-btn" id="tSwap" title="Alternar pingüino (Q)">🔄</button>
+      <button class="t-btn" id="tGrab" title="Agarrar con piolet">⛏️</button>
+      <button class="t-btn" id="tJump" title="Saltar">▲</button>
+    </div>
+  </div>
+
+  <!-- MENÚ PRINCIPAL -->
+  <div id="mainMenu" class="overlay">
+    <div class="card">
+      <div class="menu-head">
+        <div class="brand">
+          <span class="brand-icon">🐧🪢🐧</span>
+          <div>
+            <div class="title">PICOS UNIDOS</div>
+            <div class="subtitle">Escalada cooperativa con física de cuerda real</div>
+          </div>
+        </div>
+        <div class="head-actions">
+          <span id="progBadge" class="prog-pill">🏆 0% Completado</span>
+          <button class="btn" id="btnOpenSaves">💾 Partidas</button>
+          <button class="btn" id="btnMenuFS">⛶ Pantalla Completa</button>
+        </div>
+      </div>
+
+      <div class="sec-lbl">
+        <span>1. Elige Modo de Juego</span>
+        <span id="slotLabel" class="slot-indicator">Ranura activa: #1</span>
+      </div>
+      <div class="mode-grid">
+        <div class="mode-opt selected" data-mode="local">
+          <h3>🎮 Cooperativo Local</h3>
+          <p>2 jugadores en el mismo teclado. P1: WASD · P2: Flechas.</p>
+        </div>
+        <div class="mode-opt" data-mode="solo">
+          <h3>👤 Modo Solo (Relevos)</h3>
+          <p>Alterna con <b>Q</b>. ¡Al cambiar agarrado, tu compañero deja el piolet clavado!</p>
+        </div>
+        <div class="mode-opt" data-mode="online">
+          <h3>🌐 Online WebRTC</h3>
+          <p>Crea una sala con código de 4 letras o únete a un amigo con PeerJS.</p>
+        </div>
+      </div>
+
+      <!-- PANEL DE CONEXIÓN ONLINE -->
+      <div id="onlinePanel" class="hidden">
+        <div class="online-head">
+          <span>Sala Multijugador P2P</span>
+          <span id="netBadge" class="badge b-idle">Sin conectar</span>
+        </div>
+        <div class="online-row">
+          <button class="btn" id="btnCreateRoom">Crear sala (Host)</button>
+          <span id="hostCodeWrap" class="hidden">Código: <span class="room-code" id="roomCodeTxt">----</span></span>
+          <span class="dim-txt">o</span>
+          <input type="text" id="joinInput" class="code-in" maxlength="4" placeholder="ABCD">
+          <button class="btn btn-orange" id="btnJoinRoom">Unirme</button>
+          <button class="btn hidden" id="btnLocalFallback">Volver a Local</button>
+        </div>
+        <p id="netMsg" class="net-msg">El anfitrión ejecuta la física y comparte el código de 4 letras.</p>
+      </div>
+
+      <div class="sec-lbl">
+        <span>2. Selecciona Ruta de la Montaña</span>
+        <span class="dim-txt">Medallas: 🥇 0-2 caídas · 🥈 3-6 · 🥉 Completado</span>
+      </div>
+      <div class="lvl-grid" id="levelSelector"></div>
+
+      <div class="ctrl-bar">
+        <span><b style="color:var(--blue)">Pingo (Azul):</b> <span class="kbd">A</span><span class="kbd">D</span> Mover · <span class="kbd">W</span> Saltar · <span class="kbd">S</span> Piolet</span>
+        <span><b style="color:var(--orange)">Fredo (Naranja):</b> <span class="kbd">←</span><span class="kbd">→</span> Mover · <span class="kbd">↑</span> Saltar · <span class="kbd">↓</span> Piolet</span>
+        <span><b style="color:var(--green)">Atajos:</b> <span class="kbd">Q</span> Relevos · <span class="kbd">F</span> Pantalla Completa · <span class="kbd">H</span> Minimizar HUD</span>
+      </div>
+
+      <div class="menu-footer">
+        <button class="btn btn-green hidden" id="btnContinue">▶ Continuar Partida Guardada</button>
+        <button class="btn btn-primary" id="btnStart">🏔️ ¡Comenzar Escalada!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE PARTIDAS GUARDADAS -->
+  <div id="saveModal" class="overlay hidden">
+    <div class="card card-sm">
+      <div class="modal-top">
+        <h2>💾 Gestor de Partidas Guardadas</h2>
+        <button class="btn btn-icon" id="btnCloseSaves">✕</button>
+      </div>
+      <p class="dim-txt">El progreso se guarda automáticamente al tocar cualquier <b>Checkpoint (bandera roja)</b> o superar un nivel. También puedes exportar un código para llevar tu partida a otro PC.</p>
+
+      <div class="sec-lbl"><span>Ranuras de Memoria</span></div>
+      <div class="slots-grid" id="slotsBox"></div>
+
+      <div class="sec-lbl"><span>Código de Respaldo (Exportar / Importar)</span></div>
+      <textarea id="saveCodeArea" class="code-area" placeholder="Pulsa 'Copiar Código' o pega aquí un código de respaldo..."></textarea>
+
+      <div class="save-actions">
+        <div class="save-left">
+          <button class="btn" id="btnExport">📋 Generar y Copiar Código</button>
+          <button class="btn btn-green" id="btnImport">📥 Cargar Código</button>
+        </div>
+        <button class="btn btn-danger" id="btnClearSlot">🗑️ Borrar Ranura</button>
+      </div>
+      <p id="saveStatusMsg" class="status-msg"></p>
+    </div>
+  </div>
+
+  <!-- MENÚ DE PAUSA -->
+  <div id="pauseMenu" class="overlay hidden">
+    <div class="card card-xs">
+      <h2>⏸ Juego en Pausa</h2>
+      <p class="save-hint">💾 Progreso sincronizado en el último Checkpoint</p>
+      <div class="pause-stack">
+        <button class="btn btn-primary" id="btnResume">▶ Continuar Escalando</button>
+        <button class="btn" id="btnPauseFS">⛶ Pantalla Completa</button>
+        <button class="btn" id="btnRespawn">🚩 Volver al Último Checkpoint</button>
+        <button class="btn" id="btnRestart">🔄 Reiniciar Nivel desde Cero</button>
+        <button class="btn btn-orange" id="btnExit">💾 Guardar y Salir al Menú</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PANTALLA DE VICTORIA -->
+  <div id="winMenu" class="overlay hidden">
+    <div class="card card-xs">
+      <div id="winMedal" class="medal-big">🥇</div>
+      <h2 class="win-heading">¡Cumbre Alcanzada!</h2>
+      <p id="winTitle" class="dim-txt"></p>
+      <div class="win-stats">
+        <div>
+          <div class="win-lbl">TIEMPO</div>
+          <div id="winTime" class="win-val" style="color:var(--blue)">00:00.0</div>
+        </div>
+        <div>
+          <div class="win-lbl">CAÍDAS</div>
+          <div id="winFalls" class="win-val" style="color:var(--orange)">0</div>
+        </div>
+      </div>
+      <div class="win-btns">
+        <button class="btn" id="btnWinMenu">🏠 Menú</button>
+        <button class="btn btn-primary" id="btnNextLvl">Siguiente Nivel ➡</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRIPTS MODULARES -->
+  <script src="levels.js"></script>
+  <script src="systems.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
