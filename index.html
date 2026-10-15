@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Picos Unidos — Edición Modular</title>
-  <link rel="stylesheet" href="style.css?v=3">
+  <title>Picos Unidos — Bread & Fred Edition (HTML5 Canvas)</title>
+  <link rel="stylesheet" href="style.css?v=4">
   <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" async></script>
 </head>
 <body>
@@ -12,51 +12,72 @@
   <canvas id="gameCanvas"></canvas>
   <div id="saveToast">💾 Progreso guardado</div>
 
-  <!-- HUD SUPERIOR COMPACTO -->
+  <!-- AVISO DE VIENTO / CUENTA ATRÁS -->
+  <div id="windAlert" class="wind-banner hidden">💨 ¡RÁFAGA DE VIENTO INMINENTE! ¡ÁNCLATE CON S / ▼!</div>
+
+  <!-- HUD SUPERIOR BREAD & FRED COMPACTO -->
   <div id="hud">
     <div class="hud-left">
-      <div class="hud-pill">
-        <div class="stat"><small>NIVEL</small> <span id="hudLevel">1</span></div>
+      <!-- ALTÍMETRO EN METROS (0m a 500m) -->
+      <div class="hud-pill alt-pill" title="Altitud actual y récord histórico">
+        <span class="alt-icon">🏔️</span>
+        <div class="stat"><span id="hudAlt" class="alt-val">0m</span></div>
         <div class="sep"></div>
-        <div class="stat"><small>🚩 CP</small> <span id="hudCP">1/4</span></div>
-        <div class="sep"></div>
-        <div class="stat"><small>⏱</small> <span id="hudTime">00:00.0</span></div>
-        <div class="sep"></div>
-        <div class="stat"><small>💥</small> <span id="hudFalls">0</span></div>
+        <div class="stat"><small>MÁX</small> <span id="hudMaxAlt">0m</span></div>
       </div>
 
+      <!-- ESTADÍSTICAS DE ESCALADA -->
       <div class="hud-pill">
-        <div class="stam-wrap" title="Resistencia Pingo (Azul)">
+        <div class="stat" id="hudLevelWrap" title="Sector o Montaña Continua"><small>SECTOR</small> <span id="hudLevel">Montaña 0-500m</span></div>
+        <div class="sep"></div>
+        <div class="stat" title="Punto de control alcanzado"><small>🚩 CP</small> <span id="hudCP">1/1</span></div>
+        <div class="sep"></div>
+        <div class="stat" title="Sardinas Doradas coleccionadas"><small>🐟</small> <span id="hudFish">0/20</span></div>
+        <div class="sep"></div>
+        <div class="stat" title="Tiempo de escalada"><small>⏱</small> <span id="hudTime">00:00.0</span></div>
+        <div class="sep"></div>
+        <div class="stat" title="Caídas totales"><small>💥</small> <span id="hudFalls">0</span></div>
+      </div>
+
+      <!-- BARRAS DE STAMINA (3.0s de Wall Cling) -->
+      <div class="hud-pill">
+        <div class="stam-wrap" title="Stamina Pingo (Azul)">
           <span class="p-dot" style="background:var(--blue)">P1</span>
           <div class="stam-bg"><div id="stam1" class="stam-fill" style="background:var(--blue)"></div></div>
         </div>
-        <div class="stam-wrap" title="Resistencia Fredo (Naranja)">
-          <span class="p-dot" style="background:var(--orange)">P2</span>
+        <div class="stam-wrap" id="stamWrap2" title="Stamina Fredo / Jeff">
+          <span class="p-dot" id="p2Dot" style="background:var(--orange)">P2</span>
           <div class="stam-bg"><div id="stam2" class="stam-fill" style="background:var(--orange)"></div></div>
         </div>
       </div>
     </div>
 
+    <!-- BOTONES DE ACCIÓN RÁPIDA -->
     <div class="hud-right">
-      <button class="btn btn-icon" id="btnQuickMode" title="Alternar 2J / Solo">🎮 2J</button>
+      <button class="btn btn-icon btn-cd" id="btnCountdown" title="Cuenta atrás 3... 2... 1... ¡YA! (Tecla C)">⏱️ 3-2-1</button>
+      <button class="btn btn-icon" id="btnAssists" title="Ayudas y Accesibilidad Bread & Fred">🛠️ Ayudas</button>
+      <button class="btn btn-icon" id="btnQuickMode" title="Alternar modo de juego">🎮 2J</button>
       <button class="btn btn-icon" id="btnHudSave" title="Gestor de Partidas">💾</button>
-      <button class="btn btn-icon" id="btnTouch" title="Controles táctiles">📱</button>
+      <button class="btn btn-icon" id="btnTouch" title="Mostrar/Ocultar controles táctiles">📱</button>
       <button class="btn btn-icon" id="btnMute" title="Sonido Sí/No">🔊</button>
       <button class="btn btn-icon" id="btnFS" title="Pantalla Completa (Tecla F)">⛶</button>
       <button class="btn" id="btnPause">⏸ Pausa</button>
     </div>
   </div>
 
-  <!-- CONTROLES TÁCTILES PARA MÓVIL -->
+  <!-- CONTROLES TÁCTILES MEJORADOS PARA MÓVIL Y TABLET -->
   <div id="touchControls" class="hidden">
     <div class="t-group">
       <button class="t-btn" id="tLeft">◀</button>
       <button class="t-btn" id="tRight">▶</button>
     </div>
     <div class="t-group">
-      <button class="t-btn" id="tSwap" title="Alternar pingüino (Q)">🔄</button>
-      <button class="t-btn" id="tGrab" title="Agarrar con piolet">⛏️</button>
-      <button class="t-btn" id="tJump" title="Saltar">▲</button>
+      <button class="t-btn t-btn-sm" id="tPull" title="Recoger Cuerda / Polea (R)">🪢</button>
+      <button class="t-btn t-btn-sm" id="tCd" title="Cuenta atrás (C)">⏱️</button>
+      <button class="t-btn t-btn-sm" id="tFlag" title="Colocar Bandera Checkpoint (B)">🚩</button>
+      <button class="t-btn" id="tSwap" title="Acción Jeff / Relevo (Q)">🪨</button>
+      <button class="t-btn" id="tGrab" title="Anclarse / Piolet (S / ▼)">⛏️</button>
+      <button class="t-btn t-btn-jump" id="tJump" title="Saltar (W / ▲)">▲</button>
     </div>
   </div>
 
@@ -68,11 +89,11 @@
           <span class="brand-icon">🐧🪢🐧</span>
           <div>
             <div class="title">PICOS UNIDOS</div>
-            <div class="subtitle">Escalada cooperativa con física de cuerda real</div>
+            <div class="subtitle">Réplica exacta de Bread & Fred — Físicas de Péndulo Rígido y Cuerda Real</div>
           </div>
         </div>
         <div class="head-actions">
-          <span id="progBadge" class="prog-pill">🏆 0% Completado</span>
+          <span id="progBadge" class="prog-pill">🏆 0m Máx · 🐟 0/20</span>
           <button class="btn" id="btnOpenSaves">💾 Partidas</button>
           <button class="btn" id="btnMenuFS">⛶ Pantalla Completa</button>
         </div>
@@ -85,50 +106,117 @@
       <div class="mode-grid">
         <div class="mode-opt selected" data-mode="local">
           <h3>🎮 Cooperativo Local</h3>
-          <p>2 jugadores en el mismo teclado. P1: WASD · P2: Flechas.</p>
+          <p>2 jugadores en el mismo teclado. P1: <b>WASD</b> · P2: <b>Flechas</b>.</p>
         </div>
         <div class="mode-opt" data-mode="solo">
-          <h3>👤 Modo Solo (Relevos)</h3>
-          <p>Alterna con <b>Q</b>. ¡Al cambiar agarrado, tu compañero deja el piolet clavado!</p>
+          <h3>🪨 Modo Solo con Roca "Jeff"</h3>
+          <p>Coge a Jeff con <b>S</b>, lánzala con <b>W</b>, balancéate en ella y tira de la cuerda.</p>
         </div>
         <div class="mode-opt" data-mode="online">
-          <h3>🌐 Online WebRTC</h3>
-          <p>Crea una sala con código de 4 letras o únete a un amigo con PeerJS.</p>
+          <h3>🌐 Multijugador Online (P2P)</h3>
+          <p>Sala WebRTC con PeerJS (STUN/TURN). Código de 4 letras ultra-compatible.</p>
         </div>
       </div>
 
       <!-- PANEL DE CONEXIÓN ONLINE -->
       <div id="onlinePanel" class="hidden">
         <div class="online-head">
-          <span>Sala Multijugador P2P</span>
+          <span>Sala Multijugador WebRTC PeerJS</span>
           <span id="netBadge" class="badge b-idle">Sin conectar</span>
         </div>
         <div class="online-row">
-          <button class="btn" id="btnCreateRoom">Crear sala (Host)</button>
+          <button class="btn btn-primary" id="btnCreateRoom">Crear sala (Host Autoridad)</button>
           <span id="hostCodeWrap" class="hidden">Código: <span class="room-code" id="roomCodeTxt">----</span></span>
           <span class="dim-txt">o</span>
           <input type="text" id="joinInput" class="code-in" maxlength="4" placeholder="ABCD">
-          <button class="btn btn-orange" id="btnJoinRoom">Unirme</button>
+          <button class="btn btn-orange" id="btnJoinRoom">Unirme a Sala</button>
           <button class="btn hidden" id="btnLocalFallback">Volver a Local</button>
         </div>
-        <p id="netMsg" class="net-msg">El anfitrión ejecuta la física y comparte el código de 4 letras.</p>
+        <p id="netMsg" class="net-msg">El Anfitrión (Host) es la autoridad física de la cuerda y los bloques para evitar desincronizaciones.</p>
       </div>
 
       <div class="sec-lbl">
-        <span>2. Selecciona Ruta de la Montaña</span>
-        <span class="dim-txt">Medallas: 🥇 0-2 caídas · 🥈 3-6 · 🥉 Completado</span>
+        <span>2. Selecciona Desafío de la Montaña</span>
+        <span class="dim-txt">La Gran Montaña Continua de 0m a 500m o práctica por sectores</span>
       </div>
       <div class="lvl-grid" id="levelSelector"></div>
 
+      <!-- ASISTENCIAS BREAD & FRED -->
+      <div class="sec-lbl">
+        <span>3. Asistencias de Accesibilidad (Bread & Fred)</span>
+        <span class="dim-txt">Totalmente opcionales</span>
+      </div>
+      <div class="assist-grid">
+        <label class="assist-opt">
+          <input type="checkbox" id="chkInfiniteStamina">
+          <div>
+            <b>⚡ Stamina Infinita</b>
+            <p>El piolet no resbala nunca de las paredes de hielo (3.0s congelados).</p>
+          </div>
+        </label>
+        <label class="assist-opt">
+          <input type="checkbox" id="chkRopePull" checked>
+          <div>
+            <b>🪢 Recoger Cuerda (Polea)</b>
+            <p>Mantén <b>R</b> mientras estás anclado para izar a tu compañero.</p>
+          </div>
+        </label>
+        <label class="assist-opt">
+          <input type="checkbox" id="chkCustomFlag" checked>
+          <div>
+            <b>🚩 Bandera de Checkpoint Móvil</b>
+            <p>Pulsa <b>B</b> para clavar tu propia bandera de respawn en cualquier suelo firme.</p>
+          </div>
+        </label>
+      </div>
+
       <div class="ctrl-bar">
-        <span><b style="color:var(--blue)">Pingo (Azul):</b> <span class="kbd">A</span><span class="kbd">D</span> Mover · <span class="kbd">W</span> Saltar · <span class="kbd">S</span> Piolet</span>
-        <span><b style="color:var(--orange)">Fredo (Naranja):</b> <span class="kbd">←</span><span class="kbd">→</span> Mover · <span class="kbd">↑</span> Saltar · <span class="kbd">↓</span> Piolet</span>
-        <span><b style="color:var(--green)">Atajos:</b> <span class="kbd">Q</span> Relevos · <span class="kbd">F</span> Pantalla Completa · <span class="kbd">H</span> Minimizar HUD</span>
+        <span><b style="color:var(--blue)">Pingo:</b> <span class="kbd">A</span><span class="kbd">D</span> Mover · <span class="kbd">W</span> Saltar · <span class="kbd">S</span> Anclar/Piolet</span>
+        <span><b style="color:var(--orange)">Fredo / Jeff:</b> <span class="kbd">←</span><span class="kbd">→</span> Mover · <span class="kbd">↑</span> Saltar · <span class="kbd">↓</span> Anclar</span>
+        <span><b style="color:var(--green)">Acciones:</b> <span class="kbd">C</span> Cuenta atrás 3-2-1 · <span class="kbd">R</span> Polea · <span class="kbd">B</span> Bandera · <span class="kbd">F</span> Pantalla completa</span>
       </div>
 
       <div class="menu-footer">
         <button class="btn btn-green hidden" id="btnContinue">▶ Continuar Partida Guardada</button>
-        <button class="btn btn-primary" id="btnStart">🏔️ ¡Comenzar Escalada!</button>
+        <button class="btn btn-primary btn-lg" id="btnStart">🏔️ ¡Comenzar Gran Escalada (0m — 500m)!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE ASISTENCIAS EN JUEGO -->
+  <div id="assistModal" class="overlay hidden">
+    <div class="card card-xs">
+      <div class="modal-top">
+        <h2>🛠️ Ajustes de Asistencia</h2>
+        <button class="btn btn-icon" id="btnCloseAssist">✕</button>
+      </div>
+      <p class="dim-txt" style="text-align:left; margin-bottom:12px;">Adapta la dificultad para jugar a tu ritmo como en Bread & Fred:</p>
+      <div class="assist-stack">
+        <label class="assist-opt">
+          <input type="checkbox" id="chkIngameStamina">
+          <div>
+            <b>⚡ Resistencia Infinita</b>
+            <p>Sin límite de 3 segundos en agarre a la pared.</p>
+          </div>
+        </label>
+        <label class="assist-opt">
+          <input type="checkbox" id="chkIngamePull">
+          <div>
+            <b>🪢 Recoger Cuerda / Polea (Tecla R)</b>
+            <p>Iza a tu compañero colgado hacia ti.</p>
+          </div>
+        </label>
+        <label class="assist-opt">
+          <input type="checkbox" id="chkIngameFlag">
+          <div>
+            <b>🚩 Bandera Personal (Tecla B)</b>
+            <p>Planta una bandera en cualquier suelo firme.</p>
+          </div>
+        </label>
+      </div>
+      <div style="margin-top:14px;">
+        <button class="btn btn-primary" id="btnPlaceFlagIngame">🚩 Clavar Bandera Aquí</button>
+        <button class="btn" id="btnTeleportFlagIngame">↩ Volver a Mi Bandera</button>
       </div>
     </div>
   </div>
@@ -140,13 +228,13 @@
         <h2>💾 Gestor de Partidas Guardadas</h2>
         <button class="btn btn-icon" id="btnCloseSaves">✕</button>
       </div>
-      <p class="dim-txt">El progreso se guarda automáticamente al tocar cualquier <b>Checkpoint (bandera roja)</b> o superar un nivel. También puedes exportar un código para llevar tu partida a otro PC.</p>
+      <p class="dim-txt">El progreso se guarda de forma segura en <b>localStorage</b> en 3 ranuras independientes. Guarda tu altitud máxima, sardinas doradas y tiempos récords.</p>
 
       <div class="sec-lbl"><span>Ranuras de Memoria</span></div>
       <div class="slots-grid" id="slotsBox"></div>
 
       <div class="sec-lbl"><span>Código de Respaldo (Exportar / Importar)</span></div>
-      <textarea id="saveCodeArea" class="code-area" placeholder="Pulsa 'Copiar Código' o pega aquí un código de respaldo..."></textarea>
+      <textarea id="saveCodeArea" class="code-area" placeholder="Pulsa 'Generar y Copiar Código' o pega aquí un código para restaurar..."></textarea>
 
       <div class="save-actions">
         <div class="save-left">
@@ -163,23 +251,24 @@
   <div id="pauseMenu" class="overlay hidden">
     <div class="card card-xs">
       <h2>⏸ Juego en Pausa</h2>
-      <p class="save-hint">💾 Progreso sincronizado en el último Checkpoint</p>
+      <p class="save-hint">💾 Progreso sincronizado continuamente</p>
       <div class="pause-stack">
         <button class="btn btn-primary" id="btnResume">▶ Continuar Escalando</button>
+        <button class="btn" id="btnRespawnFlag">🚩 Volver a la Bandera de Checkpoint</button>
+        <button class="btn" id="btnPauseAssists">🛠️ Asistencias de Accesibilidad</button>
         <button class="btn" id="btnPauseFS">⛶ Pantalla Completa</button>
-        <button class="btn" id="btnRespawn">🚩 Volver al Último Checkpoint</button>
         <button class="btn" id="btnRestart">🔄 Reiniciar Nivel desde Cero</button>
         <button class="btn btn-orange" id="btnExit">💾 Guardar y Salir al Menú</button>
       </div>
     </div>
   </div>
 
-  <!-- PANTALLA DE VICTORIA -->
+  <!-- PANTALLA DE VICTORIA (EL ALTAR DEL METRO 500) -->
   <div id="winMenu" class="overlay hidden">
     <div class="card card-xs">
-      <div id="winMedal" class="medal-big">🥇</div>
-      <h2 class="win-heading">¡Cumbre Alcanzada!</h2>
-      <p id="winTitle" class="dim-txt"></p>
+      <div id="winMedal" class="medal-big">👑</div>
+      <h2 class="win-heading">¡Cumbre de los 500m Alcanzada!</h2>
+      <p id="winTitle" class="dim-txt">¡Habéis conquistado el Altar de los Picos Unidos!</p>
       <div class="win-stats">
         <div>
           <div class="win-lbl">TIEMPO</div>
@@ -189,17 +278,21 @@
           <div class="win-lbl">CAÍDAS</div>
           <div id="winFalls" class="win-val" style="color:var(--orange)">0</div>
         </div>
+        <div>
+          <div class="win-lbl">SARDINAS</div>
+          <div id="winFish" class="win-val" style="color:var(--gold)">0/20</div>
+        </div>
       </div>
       <div class="win-btns">
-        <button class="btn" id="btnWinMenu">🏠 Menú</button>
-        <button class="btn btn-primary" id="btnNextLvl">Siguiente Nivel ➡</button>
+        <button class="btn" id="btnWinMenu">🏠 Menú Principal</button>
+        <button class="btn btn-primary" id="btnNextLvl">🔄 Volver a Escalar</button>
       </div>
     </div>
   </div>
 
   <!-- SCRIPTS MODULARES -->
-  <script src="levels.js?v=3"></script>
-  <script src="systems.js?v=3"></script>
-  <script src="game.js?v=3"></script>
+  <script src="levels.js?v=4"></script>
+  <script src="systems.js?v=4"></script>
+  <script src="game.js?v=4"></script>
 </body>
 </html>
