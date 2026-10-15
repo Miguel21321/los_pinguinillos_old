@@ -357,7 +357,15 @@ window.Net = {
     this.role = 'host';
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-    this.peer = new Peer(code);
+    this.peer = new Peer(code, {
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    });
     this.status('Creando sala...', 'b-live');
     this.peer.on('open', id => {
       document.getElementById('roomCodeTxt').textContent = id;
@@ -384,7 +392,15 @@ window.Net = {
       return;
     }
     this.role = 'guest';
-    this.peer = new Peer();
+    this.peer = new Peer({
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    });
     this.status('Conectando...', 'b-live');
     this.peer.on('open', () => this.bindConnection(this.peer.connect(room, { reliable: true })));
     this.peer.on('error', () => {
