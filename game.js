@@ -358,6 +358,8 @@ window.Net = {
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
     this.peer = new Peer(code, {
+      secure: true,
+      port: 443,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -380,8 +382,8 @@ window.Net = {
     });
     this.peer.on('connection', connection => this.bindConnection(connection));
     this.peer.on('error', error => {
-      this.status('No se pudo crear la sala', 'b-error');
-      toast(error.type === 'unavailable-id' ? 'Código ocupado, vuelve a crear la sala' : 'Error al crear la sala online');
+      this.status('Error: ' + error.type, 'b-error');
+      toast(error.type === 'unavailable-id' ? 'Código ocupado, vuelve a crear la sala' : `Error (${error.type})`);
     });
   },
 
@@ -399,6 +401,8 @@ window.Net = {
     }
     this.role = 'guest';
     this.peer = new Peer({
+      secure: true,
+      port: 443,
       config: {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
@@ -415,9 +419,9 @@ window.Net = {
     this.peer.on('disconnected', () => {
       if (this.peer && !this.peer.destroyed) this.peer.reconnect();
     });
-    this.peer.on('error', () => {
-      this.status('No se pudo conectar a la sala', 'b-error');
-      toast('Revisa el código e inténtalo de nuevo');
+    this.peer.on('error', error => {
+      this.status('Error: ' + error.type, 'b-error');
+      toast(`Error de conexión (${error.type})`);
     });
   }
 };
