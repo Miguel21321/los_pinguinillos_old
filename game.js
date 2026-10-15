@@ -362,7 +362,10 @@ window.Net = {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
         ]
       }
     });
@@ -371,6 +374,9 @@ window.Net = {
       document.getElementById('roomCodeTxt').textContent = id;
       document.getElementById('hostCodeWrap').classList.remove('hidden');
       this.status(`Sala ${id} lista`, 'b-live');
+    });
+    this.peer.on('disconnected', () => {
+      if (this.peer && !this.peer.destroyed) this.peer.reconnect();
     });
     this.peer.on('connection', connection => this.bindConnection(connection));
     this.peer.on('error', error => {
@@ -397,12 +403,18 @@ window.Net = {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
           { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
+          { urls: 'stun:global.stun.twilio.com:3478' },
+          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+          { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
         ]
       }
     });
     this.status('Conectando...', 'b-live');
     this.peer.on('open', () => this.bindConnection(this.peer.connect(room, { reliable: true })));
+    this.peer.on('disconnected', () => {
+      if (this.peer && !this.peer.destroyed) this.peer.reconnect();
+    });
     this.peer.on('error', () => {
       this.status('No se pudo conectar a la sala', 'b-error');
       toast('Revisa el código e inténtalo de nuevo');
