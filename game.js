@@ -295,6 +295,225 @@ window.Input = {
   }
 };
 
+const ICE_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+  ]
+};
+
+class NativeDataConnection {
+  constructor() {
+    this.events = {};
+    this.open = false;
+  }
+  on(event, cb) {
+    if (!this.events[event]) this.events[event] = [];
+    this.events[event].push(cb);
+  }
+  emit(event, data) {
+    if (this.events[event]) this.events[event].forEach(cb => cb(data));
+  }
+  send(data) {
+    if (this.open && this._dc && this._dc.readyState === 'open') {
+      try {
+        this._dc.send(JSON.stringify(data));
+      } catch (e) {
+        console.error("DC send error:", e);
+      }
+    }
+  }
+  close() {
+    this.open = false;
+    if (this._dc) this._dc.close();
+    this.emit('close');
+  }
+}
+
+class NativeMQTTFallback {
+  constructor(brokerUrl, roomCode, isHost) {
+    this.brokerUrl = brokerUrl;
+    this.roomCode = roomCode;
+    this.isHost = isHost;
+    this.mqttClient = null;
+    this.pc = null;
+    this.conn = new NativeDataConnection();
+    this.destroyed = false;
+    this.topicBase = `picos_unidos_${roomCode}`;
+
+    this.events = {};
+  }
+
+  on(event, cb) {
+    if (!this.events[event]) this.events[event] = [];
+    this.events[event].push(cb);
+  }
+
+  emit(event, data) {
+    if (this.events[event]) this.events[event].forEach(cb => cb(data));
+  }
+
+  destroy() {
+    this.destroyed = true;
+    if (this.mqttClient) {
+      try { this.mqttClient.disconnect(); } catch (e) {}
+    }
+    if (this.pc) {
+      this.pc.close();
+    }
+    this.conn.close();
+  }
+
+  connect() {
+    return new Promise((resolve, reject) => {
+      if (!window.Paho || !window.Paho.MQTT || !window.Paho.MQTT.Client) {
+        return reject(new Error('Paho MQTT not loaded'));
+      }
+
+      const clientId = `picos_${Math.random().toString(36).substr(2, 9)}`;
+      let host, port;
+      const url = new URL(this.brokerUrl);
+      host = url.hostname;
+      port = parseInt(url.port) || (url.protocol === 'wss:' ? 443 : 80);
+
+      this.mqttClient = new window.Paho.MQTT.Client(host, port, url.pathname, clientId);
+
+      this.mqttClient.onConnectionLost = (resp) => {
+        if (!this.destroyed) {
+          console.log("MQTT Connection lost:", resp);
+          this.emit('disconnected');
+        }
+      };
+
+      this.mqttClient.onMessageArrived = (message) => {
+        if (this.destroyed) return;
+        try {
+          const payload = JSON.parse(message.payloadString);
+          this.handleSignaling(payload);
+        } catch (e) {
+          console.error("MQTT parse error:", e);
+        }
+      };
+
+      this.mqttClient.connect({
+        useSSL: url.protocol === 'wss:',
+        timeout: 4,
+        onSuccess: () => {
+          this.mqttClient.subscribe(`${this.topicBase}/${this.isHost ? 'host' : 'guest'}`);
+          resolve();
+          if (this.isHost) {
+            this.emit('open', this.roomCode);
+          } else {
+            this.emit('open');
+            this.initWebRTC();
+          }
+        },
+        onFailure: (err) => {
+          reject(new Error(err.errorMessage || 'MQTT connect failed'));
+        }
+      });
+    });
+  }
+
+  sendSignaling(data) {
+    if (this.destroyed || !this.mqttClient) return;
+    const topic = `${this.topicBase}/${this.isHost ? 'guest' : 'host'}`;
+    const message = new window.Paho.MQTT.Message(JSON.stringify(data));
+    message.destinationName = topic;
+    this.mqttClient.send(message);
+  }
+
+  initWebRTC() {
+    this.pc = new RTCPeerConnection(ICE_CONFIG);
+
+    this.pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.sendSignaling({ type: 'candidate', candidate: event.candidate });
+      }
+    };
+
+    this.pc.onconnectionstatechange = () => {
+      if (this.pc.connectionState === 'disconnected' || this.pc.connectionState === 'failed') {
+        this.conn.close();
+      }
+    };
+
+    if (this.isHost) {
+      this.pc.ondatachannel = (event) => {
+        this.setupDataChannel(event.channel);
+      };
+    } else {
+      const dc = this.pc.createDataChannel('game_data');
+      this.setupDataChannel(dc);
+
+      this.pc.createOffer()
+        .then(offer => this.pc.setLocalDescription(offer))
+        .then(() => {
+          this.sendSignaling({ type: 'offer', sdp: this.pc.localDescription });
+        })
+        .catch(e => {
+          this.emit('error', { type: 'webrtc-error', message: e.message });
+        });
+    }
+  }
+
+  setupDataChannel(dc) {
+    this.conn._dc = dc;
+    dc.onopen = () => {
+      this.conn.open = true;
+      if (this.isHost) {
+        this.emit('connection', this.conn);
+      }
+      this.conn.emit('open');
+    };
+    dc.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.conn.emit('data', data);
+      } catch(e) {}
+    };
+    dc.onclose = () => {
+      this.conn.close();
+    };
+    dc.onerror = () => {
+      this.conn.emit('error', new Error("DataChannel error"));
+    };
+
+    if (!this.isHost) {
+      // Guest returns the connection object
+      setTimeout(() => {
+        // Mock peer.connect returning the connection
+      }, 0);
+    }
+  }
+
+  handleSignaling(payload) {
+    if (payload.type === 'offer' && this.isHost) {
+      if (!this.pc) this.initWebRTC();
+      this.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp))
+        .then(() => this.pc.createAnswer())
+        .then(answer => this.pc.setLocalDescription(answer))
+        .then(() => {
+          this.sendSignaling({ type: 'answer', sdp: this.pc.localDescription });
+        })
+        .catch(e => console.error(e));
+    } else if (payload.type === 'answer' && !this.isHost) {
+      this.pc.setRemoteDescription(new RTCSessionDescription(payload.sdp)).catch(e => console.error(e));
+    } else if (payload.type === 'candidate') {
+      if (!this.pc) return;
+      this.pc.addIceCandidate(new RTCIceCandidate(payload.candidate)).catch(e => console.error(e));
+    }
+  }
+}
+
 window.Net = {
   peer: null,
   conn: null,
@@ -302,6 +521,15 @@ window.Net = {
   connected: false,
   sendT: 0,
   guestIn: null,
+
+  brokers: [
+    { type: 'peerjs', desc: 'PeerJS Nube' },
+    { type: 'mqtt', url: 'wss://broker.emqx.io:8084/mqtt', desc: 'EMQX MQTT' },
+    { type: 'mqtt', url: 'wss://test.mosquitto.org:8081', desc: 'Mosquitto MQTT' }
+  ],
+  currentBrokerIdx: 0,
+  isHosting: false,
+  roomCode: '',
 
   status(message, className = 'b-idle') {
     const badge = document.getElementById('netBadge');
@@ -315,7 +543,7 @@ window.Net = {
 
   clean() {
     try { this.conn?.close(); } catch (error) {}
-    try { this.peer?.destroy(); } catch (error) {}
+    try { if (this.peer && this.peer.destroy) this.peer.destroy(); } catch (error) {}
     this.conn = null;
     this.peer = null;
     this.role = 'none';
@@ -349,79 +577,131 @@ window.Net = {
 
   host() {
     this.clean();
-    if (!window.Peer) {
-      this.status('PeerJS todavía no está disponible', 'b-error');
-      toast('No se pudo iniciar el modo online');
-      return;
-    }
     this.role = 'host';
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const code = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
-    this.peer = new Peer(code, {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-        ]
-      }
-    });
-    this.status('Creando sala...', 'b-live');
-    this.peer.on('open', id => {
-      document.getElementById('roomCodeTxt').textContent = id;
-      document.getElementById('hostCodeWrap').classList.remove('hidden');
-      this.status(`Sala ${id} lista`, 'b-live');
-    });
-    this.peer.on('disconnected', () => {
-      if (this.peer && !this.peer.destroyed) this.peer.reconnect();
-    });
-    this.peer.on('connection', connection => this.bindConnection(connection));
-    this.peer.on('error', error => {
-      console.error('PeerJS Host Error:', error);
-      this.status('Error: ' + error.type, 'b-error');
-      const msg = error.message || error.type;
-      toast(error.type === 'unavailable-id' ? 'Código ocupado, vuelve a crear la sala' : `Error: ${msg}`);
-    });
+    this.roomCode = Array.from({ length: 4 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join('');
+    this.currentBrokerIdx = 0;
+    this.isHosting = true;
+    this.tryNextBroker();
   },
 
   join(code) {
     this.clean();
-    if (!window.Peer) {
-      this.status('PeerJS todavía no está disponible', 'b-error');
-      toast('No se pudo iniciar el modo online');
-      return;
-    }
     const room = String(code || '').trim().toUpperCase();
     if (room.length !== 4) {
       this.status('Escribe un código de 4 letras', 'b-error');
       return;
     }
     this.role = 'guest';
-    this.peer = new Peer({
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' },
-          { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-          { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
-        ]
+    this.roomCode = room;
+    this.currentBrokerIdx = 0;
+    this.isHosting = false;
+    this.tryNextBroker();
+  },
+
+  tryNextBroker() {
+    if (this.currentBrokerIdx >= this.brokers.length) {
+      this.status('Todos los servidores fallaron', 'b-error');
+      toast('Imposible conectar. Tu red bloquea todas las vías de conexión.');
+      return;
+    }
+
+    const broker = this.brokers[this.currentBrokerIdx];
+    this.status(`Probando servidor ${this.currentBrokerIdx + 1}/${this.brokers.length} (${broker.desc})...`, 'b-wait');
+
+    if (this.peer && this.peer.destroy) {
+      try { this.peer.destroy(); } catch(e) {}
+    }
+
+    if (broker.type === 'peerjs') {
+      if (!window.Peer) {
+        this.currentBrokerIdx++;
+        return this.tryNextBroker();
       }
-    });
-    this.status('Conectando...', 'b-live');
-    this.peer.on('open', () => this.bindConnection(this.peer.connect(room, { reliable: true })));
-    this.peer.on('disconnected', () => {
-      if (this.peer && !this.peer.destroyed) this.peer.reconnect();
-    });
-    this.peer.on('error', error => {
-      console.error('PeerJS Guest Error:', error);
-      this.status('Error: ' + error.type, 'b-error');
-      const msg = error.message || error.type;
-      toast(`Error de conexión: ${msg}`);
-    });
+
+      let timeoutId;
+
+      const config = {
+        config: ICE_CONFIG,
+        debug: 0
+      };
+
+      if (this.isHosting) {
+        this.peer = new Peer(this.roomCode, config);
+      } else {
+        this.peer = new Peer(config);
+      }
+
+      timeoutId = setTimeout(() => {
+        console.warn('PeerJS Timeout. Switching broker...');
+        if (this.peer && this.peer.destroy) this.peer.destroy();
+        this.currentBrokerIdx++;
+        this.tryNextBroker();
+      }, 4500);
+
+      this.peer.on('open', id => {
+        clearTimeout(timeoutId);
+        this.onBrokerConnected();
+      });
+
+      this.peer.on('error', err => {
+        console.error('PeerJS Error:', err);
+        clearTimeout(timeoutId);
+        if (err.type === 'unavailable-id' && this.isHosting) {
+           toast('Código ocupado, vuelve a crear la sala');
+           this.status('Error al crear sala', 'b-error');
+           return;
+        }
+        if (err.type === 'network' || err.type === 'server-error' || err.type === 'peer-unavailable') {
+          this.currentBrokerIdx++;
+          this.tryNextBroker();
+        } else {
+          this.status('Error: ' + err.type, 'b-error');
+        }
+      });
+
+      this.peer.on('connection', connection => this.bindConnection(connection));
+
+    } else if (broker.type === 'mqtt') {
+      this.peer = new NativeMQTTFallback(broker.url, this.roomCode, this.isHosting);
+
+      this.peer.on('open', () => {
+        this.onBrokerConnected();
+      });
+
+      this.peer.on('error', err => {
+        console.error('MQTT Fallback Error:', err);
+        this.currentBrokerIdx++;
+        this.tryNextBroker();
+      });
+
+      this.peer.on('connection', connection => {
+         this.bindConnection(connection);
+      });
+
+      this.peer.connect().catch(err => {
+         console.error('MQTT Connect fail:', err);
+         this.currentBrokerIdx++;
+         this.tryNextBroker();
+      });
+    }
+  },
+
+  onBrokerConnected() {
+    const broker = this.brokers[this.currentBrokerIdx];
+    this.status(`Conectado en Servidor ${this.currentBrokerIdx + 1} (${broker.desc})`, 'b-live');
+    if (this.isHosting) {
+      document.getElementById('roomCodeTxt').textContent = this.roomCode;
+      document.getElementById('hostCodeWrap').classList.remove('hidden');
+      this.status(`Sala ${this.roomCode} lista`, 'b-live');
+    } else {
+      if (broker.type === 'peerjs') {
+        const conn = this.peer.connect(this.roomCode, { reliable: true });
+        this.bindConnection(conn);
+      } else {
+         // NativeMQTTFallback auto-connects to the host using the data channel
+         this.bindConnection(this.peer.conn);
+      }
+    }
   }
 };
