@@ -451,6 +451,16 @@
       }
     },
 
+    clearCustomFlag() {
+      this.customFlag = null;
+      SaveSys.saveCheckpoint(this.lvlIdx, this.cpIdx, this.timer, this.falls, this.mode, null, this.currentAltitude);
+      toast('🚩 Bandera personal retirada (usando checkpoints del nivel)');
+
+      if (this.mode === 'online' && Net.role === 'guest' && Net.conn) {
+        try { Net.conn.send({ type: 'clearflag' }); } catch (e) {}
+      }
+    },
+
     respawnAtCP(countFall = true) {
       if (countFall) {
         this.falls++;
@@ -813,6 +823,7 @@
               flag: this.customFlag,
               wind: { dir: this.windDir, phase: this.windPhase },
               crumbles: this.platforms.filter(p => p.type === 'crumble').map(p => ({ b: p.broken, c: p.cracking })),
+              movings: this.movingPlatforms.map(mp => ({ x: Math.round(mp.x), y: Math.round(mp.y), p: mp.progress, d: mp.dir })),
               p1: this.packNet(this.p1),
               p2: this.packNet(this.p2),
               rp: this.rope.pts.map(pt => [Math.round(pt.x), Math.round(pt.y)]),
@@ -1449,6 +1460,23 @@
       if (d.wind) {
         this.windDir = d.wind.dir;
         this.windPhase = d.wind.phase;
+      }
+
+      if (Array.isArray(d.crumbles)) {
+        const crumbles = this.platforms.filter(p => p.type === 'crumble');
+        for (let i = 0; i < Math.min(crumbles.length, d.crumbles.length); i++) {
+          crumbles[i].broken = d.crumbles[i].b;
+          crumbles[i].cracking = d.crumbles[i].c;
+        }
+      }
+
+      if (Array.isArray(d.movings)) {
+        for (let i = 0; i < Math.min(this.movingPlatforms.length, d.movings.length); i++) {
+          this.movingPlatforms[i].x = d.movings[i].x;
+          this.movingPlatforms[i].y = d.movings[i].y;
+          this.movingPlatforms[i].progress = d.movings[i].p;
+          this.movingPlatforms[i].dir = d.movings[i].d;
+        }
       }
 
       const lerp = (a, b, f) => a + (b - a) * f;

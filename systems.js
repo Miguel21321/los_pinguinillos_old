@@ -471,12 +471,13 @@
     },
 
     command(leftKey, rightKey, jumpKey, grabKey, pullKey) {
+      const has = k => Array.isArray(k) ? k.some(key => this.keys.has(key)) : this.keys.has(k);
       return {
-        left: this.keys.has(leftKey),
-        right: this.keys.has(rightKey),
-        jump: this.keys.has(jumpKey),
-        grab: this.keys.has(grabKey),
-        ropePull: this.keys.has(pullKey)
+        left: has(leftKey),
+        right: has(rightKey),
+        jump: has(jumpKey),
+        grab: has(grabKey),
+        ropePull: has(pullKey)
       };
     },
 
@@ -501,10 +502,10 @@
         };
       }
 
-      // Cooperativo Local: P1 en WASD, P2 en Flechas
+      // Cooperativo Local: P1 en WASD + R, P2 en Flechas + [Shift, Enter, L, R]
       return {
         p1: this.command('a', 'd', 'w', 's', 'r'),
-        p2: this.command('arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'r')
+        p2: this.command('arrowleft', 'arrowright', 'arrowup', 'arrowdown', ['r', 'shift', 'enter', 'l'])
       };
     }
   };
@@ -569,6 +570,7 @@
           if (data.type === 'in') this.guestIn = data.state;
           if (data.type === 'cd' && window.Game) Game.startCountdown();
           if (data.type === 'flag' && window.Game) Game.placeCustomFlag();
+          if (data.type === 'clearflag' && window.Game) Game.clearCustomFlag();
           if (data.type === 'tp' && window.Game) Game.teleportToFlag();
         }
 
@@ -782,6 +784,13 @@
       document.getElementById('btnRespawnFlag')?.addEventListener('click', () => {
         Game.togglePause();
         Game.teleportToFlag();
+      });
+      document.getElementById('btnClearFlag')?.addEventListener('click', () => {
+        Game.clearCustomFlag();
+      });
+      document.getElementById('btnClearFlagIngame')?.addEventListener('click', () => {
+        Game.clearCustomFlag();
+        document.getElementById('assistModal').classList.add('hidden');
       });
 
       // Sincronizar checkboxes de asistencia
