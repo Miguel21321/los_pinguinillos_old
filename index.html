@@ -16,45 +16,60 @@
   <div id="windAlert" class="wind-banner hidden">💨 ¡RÁFAGA DE VIENTO INMINENTE! ¡ÁNCLATE CON S / ▼!</div>
   <div id="fallBanner" class="fall-banner hidden">💥 ¡Caída de -0m!</div>
 
-  <!-- HUD SUPERIOR BREAD & FRED COMPACTO -->
+  <!-- HUD SUPERIOR BREAD & FRED EXACTO (Dos Corner-Pills limpias) -->
   <div id="hud">
-    <div class="hud-left">
-      <!-- ALTÍMETRO EN METROS (0m a 500m) -->
-      <div class="hud-pill alt-pill" title="Altitud actual y récord histórico">
-        <span class="alt-icon">🏔️</span>
-        <div class="stat"><span id="hudAlt" class="alt-val">0m</span></div>
-        <div class="sep"></div>
-        <div class="stat"><small>MÁX</small> <span id="hudMaxAlt">0m</span></div>
-      </div>
-
-      <!-- ESTADÍSTICAS DE ESCALADA -->
-      <div class="hud-pill">
-        <div class="stat" id="hudLevelWrap" title="Sector o Montaña Continua"><small>SECTOR</small> <span id="hudLevel">Montaña 0-500m</span></div>
-        <div class="sep"></div>
-        <div class="stat" title="Punto de control alcanzado"><small>🚩 CP</small> <span id="hudCP">1/1</span></div>
-        <div class="sep"></div>
-        <div class="stat" title="Sardinas Doradas coleccionadas"><small>🐟</small> <span id="hudFish">0/20</span></div>
-        <div class="sep"></div>
-        <div class="stat" title="Tiempo de escalada"><small>⏱</small> <span id="hudTime">00:00.0</span></div>
-        <div class="sep"></div>
-        <div class="stat" title="Caídas totales"><small>💥</small> <span id="hudFalls">0</span></div>
-      </div>
-
-      <!-- BARRAS DE STAMINA (3.0s de Wall Cling) -->
-      <div class="hud-pill">
-        <div class="stam-wrap" title="Stamina Pingo (Azul)">
-          <span class="p-dot" style="background:var(--blue)">P1</span>
-          <div class="stam-bg"><div id="stam1" class="stam-fill" style="background:var(--blue)"></div></div>
+    <!-- ESQUINA SUPERIOR IZQUIERDA: ALTÍMETRO BREAD & FRED -->
+    <div class="bf-hud-pill bf-hud-left" title="Altitud actual y récord histórico">
+      <span class="bf-icon-alt">🏔️</span>
+      <div class="bf-data-wrap">
+        <div class="bf-primary-row">
+          <span id="hudAlt" class="bf-val-alt">0m</span>
         </div>
-        <div class="stam-wrap" id="stamWrap2" title="Stamina Fredo / Jeff">
-          <span class="p-dot" id="p2Dot" style="background:var(--orange)">P2</span>
-          <div class="stam-bg"><div id="stam2" class="stam-fill" style="background:var(--orange)"></div></div>
+        <div class="bf-sub-row" id="hudLevelWrap">
+          <span class="bf-sub-lbl">MÁX</span>
+          <span id="hudMaxAlt" class="bf-sub-val">0m</span>
+          <span class="bf-dot-sep">·</span>
+          <span id="hudLevel" class="bf-sub-sector">Montaña 0-500m</span>
         </div>
       </div>
     </div>
 
-    <!-- BOTONES DE ACCIÓN RÁPIDA -->
-    <div class="hud-right">
+    <!-- ESQUINA SUPERIOR DERECHA: CRONÓMETRO + COLECCIONABLES + MENÚ ⚙️ BREAD & FRED -->
+    <div class="bf-hud-pill bf-hud-right" title="Tiempo de escalada, coleccionables y ajustes">
+      <span class="bf-icon-time">⏱️</span>
+      <div class="bf-data-wrap">
+        <div class="bf-primary-row">
+          <span id="hudTime" class="bf-val-time">00:00.0</span>
+        </div>
+        <div class="bf-sub-row">
+          <span class="bf-sub-lbl">🐟</span>
+          <span id="hudFish" class="bf-sub-val">0/20</span>
+          <span class="bf-dot-sep">·</span>
+          <span class="bf-sub-lbl">🚩</span>
+          <span id="hudCP" class="bf-sub-val">1/1</span>
+          <span class="bf-dot-sep">·</span>
+          <span class="bf-sub-lbl">💥</span>
+          <span id="hudFalls" class="bf-sub-val">0</span>
+        </div>
+      </div>
+      <!-- BOTÓN DE ENGRANAJE DISCRETO BREAD & FRED -->
+      <button class="bf-btn-gear" id="btnPause" title="Pausa, Ajustes y Ayudas (Esc / ⚙️)">⚙️</button>
+    </div>
+
+    <!-- BARRAS DISCRETAS DE STAMINA (Wall Cling 3.0s) -->
+    <div id="stamBarContainer" class="bf-stam-container">
+      <div class="stam-wrap" id="stamWrap1" title="Stamina Pingo (Azul)">
+        <span class="p-dot" style="background:var(--blue)">P1</span>
+        <div class="stam-bg"><div id="stam1" class="stam-fill" style="background:var(--blue)"></div></div>
+      </div>
+      <div class="stam-wrap" id="stamWrap2" title="Stamina Fredo / Jeff">
+        <span class="p-dot" id="p2Dot" style="background:var(--orange)">P2</span>
+        <div class="stam-bg"><div id="stam2" class="stam-fill" style="background:var(--orange)"></div></div>
+      </div>
+    </div>
+
+    <!-- BANDEJA DE ACCIONES RÁPIDAS (Discreta y accesible) -->
+    <div class="bf-quick-tray" id="quickTray">
       <button class="btn btn-icon btn-cd" id="btnCountdown" title="Cuenta atrás 3... 2... 1... ¡YA! (Tecla C)">⏱️ 3-2-1</button>
       <button class="btn btn-icon" id="btnEmote" title="Chocar los cinco / Celebrar (Tecla E)">✋ Chocar</button>
       <button class="btn btn-icon" id="btnAssists" title="Ayudas y Accesibilidad Bread & Fred">🛠️ Ayudas</button>
@@ -63,7 +78,6 @@
       <button class="btn btn-icon" id="btnTouch" title="Mostrar/Ocultar controles táctiles">📱</button>
       <button class="btn btn-icon" id="btnMute" title="Sonido Sí/No">🔊</button>
       <button class="btn btn-icon" id="btnFS" title="Pantalla Completa (Tecla F)">⛶</button>
-      <button class="btn" id="btnPause">⏸ Pausa</button>
     </div>
   </div>
 

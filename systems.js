@@ -757,17 +757,20 @@
 
       // Look-ahead vertical: mira hacia arriba si los pingüinos están escalando o saltando
       const avgVy = (p1.vy + p2.vy) / 2;
-      const targetLookAhead = avgVy < -50 ? -85 : (avgVy > 150 ? 30 : -45);
-      this.lookAheadY += (targetLookAhead - this.lookAheadY) * 0.08;
+      // Calibración de escala exacta Bread & Fred:
+      // La altura visible en pantalla es de ~280px para ver a los pingüinos y plataformas de cerca
+      const targetVisibleHeight = 280;
+      const winH = window.innerHeight || 720;
+      const baseZoom = Math.max(1.6, Math.min(4.5, winH / targetVisibleHeight));
 
-      // Zoom dinámico según la separación de los pingüinos
-      const desiredZoom = Math.max(0.68, Math.min(1.08, 920 / Math.max(500, dist + 320)));
-      this.targetZoom = desiredZoom;
+      // Zoom dinámico según la separación de los pingüinos por la cuerda
+      const ropeExpansion = Math.max(0.74, Math.min(1.15, 230 / Math.max(150, dist)));
+      this.targetZoom = baseZoom * ropeExpansion;
 
       // Lerp suave
       this.x += (midX - this.x) * 0.12;
       this.y += (midY + this.lookAheadY - this.y) * 0.12;
-      this.zoom += (this.targetZoom - this.zoom) * 0.09;
+      this.zoom += (this.targetZoom - this.zoom) * 0.1;
 
       if (this.shakeT > 0) this.shakeT -= dt;
     },

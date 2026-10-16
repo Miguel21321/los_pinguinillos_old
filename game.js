@@ -303,6 +303,7 @@
     dialogues: [],
     particles: [],
     snow: [],
+    clouds: [],
 
     // Sistema de viento cíclico (4s calma -> 2s aviso -> 3.5s ráfaga)
     windDir: 0,
@@ -348,6 +349,25 @@
           r: 1.5 + Math.random() * 2.5,
           vy: 35 + Math.random() * 55,
           vx: -15 + Math.random() * 30
+        });
+      }
+
+      // Nubes cumulus esponjosas estilo Bread & Fred
+      this.clouds = [];
+      for (let i = 0; i < 9; i++) {
+        this.clouds.push({
+          x: (i * 260) % 2400,
+          y: 40 + (i % 3) * 65 + Math.random() * 30,
+          speed: 6 + (i % 4) * 3,
+          scale: 0.85 + (i % 3) * 0.25,
+          puffs: [
+            { ox: 0, oy: 0, r: 24 },
+            { ox: 20, oy: -8, r: 30 },
+            { ox: 44, oy: -10, r: 35 },
+            { ox: 68, oy: -4, r: 28 },
+            { ox: 86, oy: 4, r: 20 },
+            { ox: 36, oy: 10, r: 24 }
+          ]
         });
       }
 
@@ -1963,52 +1983,139 @@
       const w = this.w;
       const h = this.h;
 
-      // 1. Degradado dinámico de cielo según la altitud (de azul glacial a noche espacial con estrellas)
+      // 1. Cielo pastel Bread & Fred dinámico según la altitud (de amanecer alpino a noche cósmica con auroras)
       const altRatio = Math.max(0, Math.min(1, this.currentAltitude / 500));
       const skyGrad = ctx.createLinearGradient(0, 0, 0, h);
-      if (altRatio < 0.4) {
-        skyGrad.addColorStop(0, '#061329');
-        skyGrad.addColorStop(0.6, '#0d2242');
-        skyGrad.addColorStop(1, '#1b3b64');
-      } else if (altRatio < 0.8) {
-        skyGrad.addColorStop(0, '#030814');
-        skyGrad.addColorStop(0.6, '#081730');
-        skyGrad.addColorStop(1, '#11294d');
+      if (altRatio < 0.35) {
+        // Base y Glaciar (0m - 175m): Amanecer pastel alpino icónico Bread & Fred
+        skyGrad.addColorStop(0, '#5372e9');
+        skyGrad.addColorStop(0.26, '#7684ef');
+        skyGrad.addColorStop(0.55, '#b998f4');
+        skyGrad.addColorStop(0.78, '#f1a8d4');
+        skyGrad.addColorStop(1, '#fdd8c7');
+      } else if (altRatio < 0.7) {
+        // Alturas intermedias (175m - 350m): Atardecer violeta / rosa alpino
+        skyGrad.addColorStop(0, '#362f6b');
+        skyGrad.addColorStop(0.3, '#5c4687');
+        skyGrad.addColorStop(0.6, '#935e98');
+        skyGrad.addColorStop(0.85, '#cf7f9e');
+        skyGrad.addColorStop(1, '#f6c3b7');
       } else {
-        skyGrad.addColorStop(0, '#020409');
-        skyGrad.addColorStop(0.7, '#050c1c');
-        skyGrad.addColorStop(1, '#0a162e');
+        // Cumbres (350m - 500m): Noche cósmica alpina con estrellas y resplandor violeta
+        skyGrad.addColorStop(0, '#0c0f2b');
+        skyGrad.addColorStop(0.35, '#191b45');
+        skyGrad.addColorStop(0.7, '#2f245a');
+        skyGrad.addColorStop(1, '#5a3d78');
       }
       ctx.fillStyle = skyGrad;
       ctx.fillRect(0, 0, w, h);
 
-      // Estrellas en la cumbre
-      if (altRatio > 0.5) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${(altRatio - 0.5) * 1.6})`;
-        for (let i = 0; i < 40; i++) {
-          const sx = (i * 47) % w;
-          const sy = (i * 29) % (h * 0.7);
-          ctx.fillRect(sx, sy, 1.8, 1.8);
+      // Auroras boreales mágicas en alta montaña (altRatio > 0.65)
+      if (altRatio > 0.65) {
+        const auroraA = (altRatio - 0.65) * 2.8;
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.42, auroraA);
+        const timeNow = performance.now() * 0.001;
+        for (let j = 0; j < 2; j++) {
+          ctx.beginPath();
+          ctx.moveTo(0, h * 0.2);
+          for (let x = 0; x <= w + 60; x += 40) {
+            const ay = h * (0.15 + j * 0.12) + Math.sin(x * 0.005 + timeNow + j) * 45 + Math.cos(x * 0.003 - timeNow * 0.6) * 30;
+            ctx.lineTo(x, ay);
+          }
+          ctx.lineTo(w, h * 0.65);
+          ctx.lineTo(0, h * 0.65);
+          ctx.closePath();
+          ctx.fillStyle = j === 0 ? 'rgba(52, 211, 153, 0.35)' : 'rgba(192, 132, 252, 0.28)';
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Estrellas brillantes en la cumbre
+      if (altRatio > 0.45) {
+        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, (altRatio - 0.45) * 1.8)})`;
+        for (let i = 0; i < 48; i++) {
+          const sx = (i * 53 + 17) % w;
+          const sy = (i * 37 + 11) % (h * 0.72);
+          const starSz = (i % 5 === 0) ? 2.5 : 1.5;
+          ctx.fillRect(sx, sy, starSz, starSz);
         }
       }
 
-      // Montañas de fondo con parallax suave
-      const drawParallaxMountain = (factor, color, baseH, amp) => {
+      // Nubes cumulus pastel con suave deriva horizontal
+      if (this.clouds) {
+        ctx.save();
+        for (const cl of this.clouds) {
+          cl.x += cl.speed * dt;
+          if (cl.x > w + 160) cl.x = -160;
+          ctx.save();
+          ctx.translate(cl.x, cl.y);
+          ctx.scale(cl.scale, cl.scale);
+          // Sombra inferior de la nube (lila pastel)
+          ctx.fillStyle = altRatio < 0.6 ? 'rgba(224, 204, 238, 0.48)' : 'rgba(100, 85, 140, 0.35)';
+          for (const pf of cl.puffs) {
+            ctx.beginPath();
+            ctx.arc(pf.ox, pf.oy + 5, pf.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Cuerpo blanco esponjoso de la nube cumulus
+          ctx.fillStyle = altRatio < 0.6 ? 'rgba(255, 255, 255, 0.82)' : 'rgba(220, 215, 245, 0.65)';
+          for (const pf of cl.puffs) {
+            ctx.beginPath();
+            ctx.arc(pf.ox, pf.oy, pf.r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      // Montañas de fondo con 3 capas de parallax lila / violeta pastel con picos nevados
+      const drawParallaxMountain = (factor, color, snowColor, baseH, amp, freq1, freq2) => {
         ctx.fillStyle = color;
         ctx.beginPath();
         ctx.moveTo(0, h);
-        for (let x = 0; x <= w + 100; x += 80) {
+        const pts = [];
+        for (let x = 0; x <= w + 80; x += 40) {
           const wx = x + Camera.x * factor;
-          const py = h - baseH - Math.abs(Math.sin(wx * 0.002) * amp + Math.cos(wx * 0.005) * (amp * 0.5));
+          const py = h - baseH - Math.abs(Math.sin(wx * freq1) * amp + Math.cos(wx * freq2) * (amp * 0.55));
+          pts.push({ x, py });
           ctx.lineTo(x, py);
         }
         ctx.lineTo(w, h);
         ctx.closePath();
         ctx.fill();
+
+        // Cimas nevadas en los picos de las montañas de fondo
+        if (snowColor) {
+          ctx.fillStyle = snowColor;
+          ctx.beginPath();
+          for (let i = 0; i < pts.length; i++) {
+            const pt = pts[i];
+            const isPeak = (i > 0 && i < pts.length - 1 && pt.py < pts[i - 1].py && pt.py < pts[i + 1].py);
+            if (isPeak) {
+              ctx.moveTo(pt.x, pt.py);
+              ctx.lineTo(pt.x - 22, pt.py + 26);
+              ctx.lineTo(pt.x + 22, pt.py + 26);
+              ctx.closePath();
+            }
+          }
+          ctx.fill();
+        }
       };
-      drawParallaxMountain(0.08, '#0a172c', 230, 130);
-      drawParallaxMountain(0.2, '#122544', 150, 100);
-      drawParallaxMountain(0.35, '#1b365d', 80, 70);
+
+      if (altRatio < 0.6) {
+        // Capas diurnas pastel Bread & Fred
+        drawParallaxMountain(0.04, '#a89bc4', '#ebe4f7', 260, 140, 0.0018, 0.0042);
+        drawParallaxMountain(0.12, '#7a6899', '#d2c7e8', 180, 110, 0.0026, 0.0055);
+        drawParallaxMountain(0.25, '#4e3b6d', '#a493c4', 95, 75, 0.0038, 0.0075);
+      } else {
+        // Capas nocturnas / crepúsculo violeta
+        drawParallaxMountain(0.04, '#242048', '#54467c', 260, 140, 0.0018, 0.0042);
+        drawParallaxMountain(0.12, '#1b173b', '#413466', 180, 110, 0.0026, 0.0055);
+        drawParallaxMountain(0.25, '#120f2b', '#302550', 95, 75, 0.0038, 0.0075);
+      }
 
       // Actualizar cámara Lerp
       Camera.update(dt, this.p1, this.p2);
@@ -2019,76 +2126,229 @@
       ctx.scale(Camera.zoom, Camera.zoom);
       ctx.translate(-Camera.x, -Camera.y);
 
-      // 2. Carteles de historia y consejos en español
+      // 2. Carteles de historia y consejos en madera Bread & Fred
       for (const sg of (this.lvl ? this.lvl.signs || [] : [])) {
+        // Poste de madera
         ctx.fillStyle = '#78350f';
         ctx.fillRect(sg.x - 4, sg.y, 8, 32);
-        ctx.font = 'bold 13px Segoe UI, sans-serif';
-        const tw = ctx.measureText(sg.text).width + 28;
-        ctx.fillStyle = 'rgba(11, 21, 38, 0.92)';
-        ctx.strokeStyle = '#38bdf8';
-        ctx.lineWidth = 1.5;
+        ctx.font = 'bold 12px "Courier New", Courier, monospace, sans-serif';
+        const tw = ctx.measureText(sg.text).width + 24;
+
+        // Tabla de madera con nieve
+        ctx.fillStyle = '#92400e';
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(sg.x - tw / 2, sg.y - 36, tw, 30, 8);
+        ctx.roundRect(sg.x - tw / 2, sg.y - 36, tw, 28, 6);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#f8fafc';
+
+        // Nieve encima del cartel
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.roundRect(sg.x - tw / 2 - 2, sg.y - 39, tw + 4, 6, 3);
+        ctx.fill();
+
+        ctx.fillStyle = '#fef08a';
         ctx.textAlign = 'center';
-        ctx.fillText(sg.text, sg.x, sg.y - 16);
+        ctx.fillText(sg.text, sg.x, sg.y - 18);
       }
 
-      // 3. Plataformas normales, de hielo, paredes de escalada y crumbles
+      // 3. Plataformas Bread & Fred: Tierra chocolate stippled, manto de nieve esponjoso con drips, carámbanos y troncos
       for (const pl of this.platforms) {
         if (pl.broken) continue;
         const ox = pl.cracking ? (Math.random() - 0.5) * 6 : 0;
+        const px = pl.x + ox;
+        const py = pl.y;
+        const pw = pl.w;
+        const ph = pl.h;
 
         if (pl.type === 'normal') {
-          ctx.fillStyle = '#334155';
-          ctx.beginPath();
-          ctx.roundRect(pl.x + ox, pl.y, pl.w, pl.h, 6);
-          ctx.fill();
-          ctx.fillStyle = '#f8fafc';
-          ctx.beginPath();
-          ctx.roundRect(pl.x + ox, pl.y, pl.w, 12, 6);
-          ctx.fill();
-        } else if (pl.type === 'ice') {
-          ctx.fillStyle = '#0284c7';
-          ctx.beginPath();
-          ctx.roundRect(pl.x, pl.y, pl.w, pl.h, 6);
-          ctx.fill();
-          ctx.fillStyle = '#bae6fd';
-          ctx.beginPath();
-          ctx.roundRect(pl.x, pl.y, pl.w, 11, 6);
-          ctx.fill();
-          // Brillo de hielo
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(pl.x + 8, pl.y + 4);
-          ctx.lineTo(pl.x + pl.w - 8, pl.y + 4);
-          ctx.stroke();
-        } else if (pl.type === 'climbWall') {
-          ctx.fillStyle = '#0369a1';
-          ctx.fillRect(pl.x, pl.y, pl.w, pl.h);
-          ctx.strokeStyle = '#7dd3fc';
-          ctx.lineWidth = 2.5;
-          ctx.strokeRect(pl.x, pl.y, pl.w, pl.h);
-          // Textura de hielo vertical para piolet
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-          ctx.lineWidth = 1.5;
-          for (let py = pl.y + 20; py < pl.y + pl.h - 10; py += 30) {
+          // ¿Es un puente estrecho de troncos? (pl.w <= 90 y altura reducida)
+          const isLogBridge = pw <= 90 && ph <= 22;
+          if (isLogBridge) {
+            const numLogs = Math.max(2, Math.floor(pw / 18));
+            const logW = pw / numLogs;
+            for (let li = 0; li < numLogs; li++) {
+              const lx = px + li * logW;
+              ctx.fillStyle = '#78350f';
+              ctx.beginPath();
+              ctx.roundRect(lx + 1, py + 2, logW - 2, ph - 2, 4);
+              ctx.fill();
+              ctx.fillStyle = '#92400e';
+              ctx.fillRect(lx + 3, py + 4, logW - 6, 3);
+              ctx.strokeStyle = '#d97706';
+              ctx.lineWidth = 1.5;
+              ctx.strokeRect(lx + 2, py + 3, logW - 4, ph - 4);
+            }
+            ctx.fillStyle = '#ffffff';
             ctx.beginPath();
-            ctx.moveTo(pl.x + 6, py);
-            ctx.lineTo(pl.x + pl.w - 6, py);
+            ctx.roundRect(px, py, pw, 5, 2);
+            ctx.fill();
+          } else {
+            // Masa rocosa terrosa chocolate estilo Bread & Fred
+            ctx.fillStyle = '#452312';
+            ctx.beginPath();
+            ctx.roundRect(px, py + 8, pw, ph - 8, [0, 0, 7, 7]);
+            ctx.fill();
+
+            // Borde inferior oscuro
+            ctx.fillStyle = '#261208';
+            ctx.fillRect(px, py + ph - 4, pw, 4);
+
+            // Punteado pixel-art de textura rocosa (estrato mineral)
+            const seed = (Math.floor(px) * 31 + Math.floor(py) * 17);
+            ctx.fillStyle = '#5c321b';
+            for (let rx = 12; rx < pw - 12; rx += 18) {
+              const rHash = ((seed + rx) * 11) % 19;
+              if (rHash > 7 && ph > 20) {
+                ctx.fillRect(px + rx, py + 16 + (rHash % 4) * 3, 4, 3);
+              }
+            }
+            ctx.fillStyle = '#2d150a';
+            for (let rx = 8; rx < pw - 8; rx += 22) {
+              const rHash = ((seed + rx * 3) * 7) % 17;
+              if (rHash > 8 && ph > 22) {
+                ctx.fillRect(px + rx, py + 14 + (rHash % 3) * 4, 3, 3);
+              }
+            }
+
+            // Manto de nieve esponjoso y grueso (Pillowy Snow Blanket)
+            const snowH = Math.min(14, ph * 0.65);
+            // Sombra azul-hielo debajo del manto de nieve
+            ctx.fillStyle = '#b3c7f5';
+            ctx.beginPath();
+            ctx.roundRect(px, py, pw, snowH + 3.5, [7, 7, 4, 4]);
+            ctx.fill();
+
+            // Manto de nieve blanco brillante
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.roundRect(px, py, pw, snowH, [7, 7, 3, 3]);
+            ctx.fill();
+
+            // Gotas de nieve redondeadas colgantes (Snow Drips) estilo Bread & Fred
+            const dripStep = 18;
+            for (let dx = px + 10; dx <= px + pw - 10; dx += dripStep) {
+              const dripHash = ((seed + dx) * 7) % 5;
+              const dripR = 3.2 + (dripHash % 3);
+              ctx.fillStyle = '#b3c7f5';
+              ctx.beginPath();
+              ctx.arc(dx, py + snowH + 1.2, dripR + 0.8, 0, Math.PI);
+              ctx.fill();
+              ctx.fillStyle = '#ffffff';
+              ctx.beginPath();
+              ctx.arc(dx, py + snowH, dripR, 0, Math.PI);
+              ctx.fill();
+            }
+
+            // Carámbanos de hielo colgantes bajo salientes (Icicles)
+            if (ph >= 30 && pw >= 40) {
+              for (let ix = px + 14; ix <= px + pw - 14; ix += 36) {
+                const iHash = ((seed + ix * 5) * 13) % 7;
+                if (iHash > 2) {
+                  const iLen = 8 + (iHash % 4) * 3;
+                  ctx.fillStyle = '#bae6fd';
+                  ctx.beginPath();
+                  ctx.moveTo(ix - 3.5, py + ph);
+                  ctx.lineTo(ix + 3.5, py + ph);
+                  ctx.lineTo(ix, py + ph + iLen);
+                  ctx.closePath();
+                  ctx.fill();
+                  ctx.fillStyle = '#ffffff';
+                  ctx.fillRect(ix - 1, py + ph, 1.5, iLen * 0.55);
+                }
+              }
+            }
+          }
+        } else if (pl.type === 'ice') {
+          // Bloque de hielo glacial translúcido con brillo Bread & Fred
+          const grad = ctx.createLinearGradient(px, py, px, py + ph);
+          grad.addColorStop(0, '#38bdf8');
+          grad.addColorStop(0.3, '#0284c7');
+          grad.addColorStop(1, '#0369a1');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.roundRect(px, py, pw, ph, 7);
+          ctx.fill();
+
+          // Grietas cristalinas internas
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(px + 12, py + 8);
+          ctx.lineTo(px + 28, py + ph - 8);
+          ctx.lineTo(px + 38, py + ph - 4);
+          if (pw > 70) {
+            ctx.moveTo(px + pw - 24, py + 6);
+            ctx.lineTo(px + pw - 38, py + ph - 10);
+          }
+          ctx.stroke();
+
+          // Capa de escarcha brillante superior
+          ctx.fillStyle = '#e0f2fe';
+          ctx.beginPath();
+          ctx.roundRect(px, py, pw, 7, [7, 7, 2, 2]);
+          ctx.fill();
+
+          // Reflejo especular blanco fino
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(px + 10, py + 2.5);
+          ctx.lineTo(px + pw - 10, py + 2.5);
+          ctx.stroke();
+
+          // Carámbanos de hielo afilados debajo
+          for (let ix = px + 12; ix <= px + pw - 12; ix += 24) {
+            const iLen = 9 + ((ix * 7) % 7);
+            ctx.fillStyle = 'rgba(186, 230, 253, 0.85)';
+            ctx.beginPath();
+            ctx.moveTo(ix - 3, py + ph);
+            ctx.lineTo(ix + 3, py + ph);
+            ctx.lineTo(ix, py + ph + iLen);
+            ctx.closePath();
+            ctx.fill();
+          }
+        } else if (pl.type === 'climbWall') {
+          // Muro de escalada / Cascada de hielo congelada para piolet
+          ctx.fillStyle = '#075985';
+          ctx.fillRect(px, py, pw, ph);
+
+          // Rayas verticales de cascada helada
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2;
+          for (let lx = px + 6; lx < px + pw - 4; lx += 12) {
+            ctx.beginPath();
+            ctx.moveTo(lx, py);
+            ctx.lineTo(lx, py + ph);
             ctx.stroke();
           }
+
+          // Bordes de hielo cristalino
+          ctx.strokeStyle = '#bae6fd';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(px, py, pw, ph);
+
+          // Puntos de agarre / muescas de piolet
+          ctx.fillStyle = '#e0f2fe';
+          for (let wy = py + 16; wy < py + ph - 8; wy += 22) {
+            ctx.fillRect(px + 4, wy, pw - 8, 3);
+          }
         } else if (pl.type === 'crumble') {
-          ctx.fillStyle = pl.cracking ? '#f87171' : '#38bdf8';
+          // Bloque quebradizo
+          ctx.fillStyle = pl.cracking ? '#ef4444' : '#67e8f9';
           ctx.beginPath();
-          ctx.roundRect(pl.x + ox, pl.y, pl.w, pl.h, 5);
+          ctx.roundRect(px, py, pw, ph, 5);
           ctx.fill();
-          ctx.strokeStyle = '#fff';
-          ctx.lineWidth = 1.5;
+
+          // Fisuras de fractura
+          ctx.strokeStyle = pl.cracking ? '#fef08a' : '#ffffff';
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.moveTo(px + 6, py + 4);
+          ctx.lineTo(px + pw / 2, py + ph / 2);
+          ctx.lineTo(px + pw - 8, py + ph - 4);
           ctx.stroke();
         }
       }
@@ -2311,25 +2571,50 @@
 
       ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
 
-      // Bocadillo de diálogo flotante en español
+      // Bocadillo de diálogo flotante estilo Bread & Fred (Violeta / Indigo retro)
       if (p.speech && p.speechTimer > 0) {
         ctx.save();
-        ctx.font = 'bold 12px Segoe UI, sans-serif';
-        const pad = 16;
+        ctx.font = 'bold 12px "Courier New", Courier, monospace, sans-serif';
+        const pad = 14;
         const bw = ctx.measureText(p.speech).width + pad * 2;
+        const bh = 26;
         const by = -p.h / 2 - 46;
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+        // Sombra suave del bocadillo
+        ctx.fillStyle = 'rgba(15, 10, 30, 0.45)';
+        ctx.beginPath();
+        ctx.roundRect(-bw / 2 + 2, by + 2, bw, bh, 9);
+        ctx.fill();
+
+        // Fondo violeta-indigo oscuro Bread & Fred
+        ctx.fillStyle = '#261b44';
         ctx.strokeStyle = p.color;
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(-bw / 2, by, bw, 26, 10);
+        ctx.roundRect(-bw / 2, by, bw, bh, 8);
         ctx.fill();
         ctx.stroke();
 
-        ctx.fillStyle = '#0f172a';
+        // Cola triangular del bocadillo apuntando a la cabeza
+        ctx.fillStyle = '#261b44';
+        ctx.beginPath();
+        ctx.moveTo(-4, by + bh);
+        ctx.lineTo(4, by + bh);
+        ctx.lineTo(0, by + bh + 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = p.color;
+        ctx.beginPath();
+        ctx.moveTo(-4, by + bh);
+        ctx.lineTo(0, by + bh + 7);
+        ctx.lineTo(4, by + bh);
+        ctx.stroke();
+
+        // Texto brillante retro en amarillo arcade
+        ctx.fillStyle = '#fef08a';
         ctx.textAlign = 'center';
-        ctx.fillText(p.speech, 0, by + 17);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(p.speech, 0, by + bh / 2);
         ctx.restore();
       }
 
@@ -2595,20 +2880,47 @@
 
       if (j.speech && j.speechTimer > 0) {
         ctx.save();
-        ctx.font = 'bold 12px Segoe UI, sans-serif';
-        const pad = 16;
+        ctx.font = 'bold 12px "Courier New", Courier, monospace, sans-serif';
+        const pad = 14;
         const bw = ctx.measureText(j.speech).width + pad * 2;
+        const bh = 26;
         const by = -j.h / 2 - 46;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
+
+        // Sombra suave del bocadillo
+        ctx.fillStyle = 'rgba(15, 10, 30, 0.45)';
+        ctx.beginPath();
+        ctx.roundRect(-bw / 2 + 2, by + 2, bw, bh, 9);
+        ctx.fill();
+
+        // Fondo violeta-indigo oscuro Bread & Fred
+        ctx.fillStyle = '#261b44';
         ctx.strokeStyle = '#94a3b8';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(-bw / 2, by, bw, 26, 10);
+        ctx.roundRect(-bw / 2, by, bw, bh, 8);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#0f172a';
+
+        // Cola triangular del bocadillo apuntando a la roca
+        ctx.fillStyle = '#261b44';
+        ctx.beginPath();
+        ctx.moveTo(-4, by + bh);
+        ctx.lineTo(4, by + bh);
+        ctx.lineTo(0, by + bh + 7);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.beginPath();
+        ctx.moveTo(-4, by + bh);
+        ctx.lineTo(0, by + bh + 7);
+        ctx.lineTo(4, by + bh);
+        ctx.stroke();
+
+        // Texto brillante retro
+        ctx.fillStyle = '#38bdf8';
         ctx.textAlign = 'center';
-        ctx.fillText(j.speech, 0, by + 17);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(j.speech, 0, by + bh / 2);
         ctx.restore();
       }
 

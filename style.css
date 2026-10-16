@@ -1,7 +1,7 @@
 :root {
-  --bg-glass: rgba(11, 20, 36, 0.88);
-  --bg-card: rgba(15, 27, 48, 0.96);
-  --border-ice: rgba(140, 210, 255, 0.32);
+  --bg-glass: rgba(38, 27, 68, 0.88);
+  --bg-card: rgba(28, 20, 52, 0.96);
+  --border-ice: rgba(168, 139, 230, 0.38);
   --blue: #38bdf8;
   --orange: #fb923c;
   --green: #34d399;
@@ -9,6 +9,8 @@
   --danger: #f87171;
   --text: #f1f5f9;
   --dim: #94a3b8;
+  --bf-indigo: #261b44;
+  --bf-border: rgba(147, 122, 214, 0.45);
 }
 
 * {
@@ -90,83 +92,152 @@ html, body {
   to { transform: translateX(-50%) scale(1.04); }
 }
 
-/* ================= HUD SUPERIOR BREAD & FRED ================= */
+/* ================= HUD SUPERIOR BREAD & FRED EXACTO ================= */
 #hud {
   position: fixed;
-  top: 10px;
-  left: 12px;
-  right: 12px;
+  top: 14px;
+  left: 16px;
+  right: 16px;
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   pointer-events: none;
   z-index: 10;
-  gap: 8px;
+  gap: 12px;
 }
 
-#hud.hud-min .hud-left {
-  opacity: 0.22;
-  transform: scale(0.94);
-  transform-origin: left center;
-}
-
-.hud-left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  transition: all 0.25s ease;
-}
-
-.hud-pill {
-  background: var(--bg-glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-ice);
+/* Corner-Pills redondeadas estilo Bread & Fred */
+.bf-hud-pill {
+  background: rgba(38, 27, 68, 0.88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 2px solid rgba(147, 122, 214, 0.45);
   border-radius: 999px;
-  padding: 6px 14px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5);
+  padding: 8px 18px;
+  box-shadow: 0 8px 32px rgba(18, 10, 36, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   pointer-events: auto;
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.alt-pill {
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.25), rgba(30, 58, 138, 0.35));
-  border-color: rgba(56, 189, 248, 0.5);
+.bf-hud-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 36px rgba(18, 10, 36, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.25);
 }
 
-.alt-icon {
-  font-size: 1.05rem;
+.bf-hud-left {
+  border-color: rgba(99, 102, 241, 0.55);
 }
 
-.alt-val {
-  color: var(--blue);
-  font-size: 1rem;
-  font-weight: 900;
-  letter-spacing: 0.5px;
+.bf-hud-right {
+  border-color: rgba(168, 85, 247, 0.55);
 }
 
-.stat {
+.bf-icon-alt, .bf-icon-time {
+  font-size: 1.55rem;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.bf-data-wrap {
   display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.82rem;
-  font-weight: 700;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.bf-primary-row {
+  display: flex;
+  align-items: baseline;
+  line-height: 1.1;
+}
+
+.bf-val-alt {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
   font-variant-numeric: tabular-nums;
 }
 
-.stat small {
-  color: var(--dim);
-  font-size: 0.68rem;
-  font-weight: 800;
+.bf-val-time {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #38bdf8;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  font-variant-numeric: tabular-nums;
 }
 
-.sep {
-  width: 1px;
-  height: 15px;
-  background: rgba(255, 255, 255, 0.16);
+.bf-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: rgba(226, 232, 240, 0.75);
+  margin-top: 2px;
+}
+
+.bf-sub-lbl {
+  color: rgba(203, 213, 225, 0.65);
+}
+
+.bf-sub-val {
+  color: #ffffff;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.bf-sub-sector {
+  color: #fef08a;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bf-dot-sep {
+  color: rgba(255, 255, 255, 0.25);
+  font-weight: 900;
+}
+
+/* Botón de engranaje discreto estilo Bread & Fred */
+.bf-btn-gear {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  color: #f1f5f9;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-left: 4px;
+}
+
+.bf-btn-gear:hover {
+  background: rgba(168, 85, 247, 0.35);
+  border-color: #a855f7;
+  transform: rotate(45deg);
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.5);
+}
+
+/* Contenedor discreto de Stamina */
+.bf-stam-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(38, 27, 68, 0.82);
+  border: 1.5px solid rgba(147, 122, 214, 0.35);
+  border-radius: 999px;
+  padding: 5px 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4);
+  pointer-events: auto;
 }
 
 .stam-wrap {
@@ -211,12 +282,38 @@ html, body {
   to { opacity: 0.25; filter: none; }
 }
 
-.hud-right {
+/* Bandeja de acciones rápidas flotante y elegante */
+.bf-quick-tray {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 6px;
+  background: rgba(30, 20, 56, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1.5px solid rgba(147, 122, 214, 0.38);
+  border-radius: 999px;
+  padding: 5px 12px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
   pointer-events: auto;
-  flex-wrap: wrap;
+  z-index: 15;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.bf-quick-tray .btn {
+  padding: 5px 10px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.bf-quick-tray .btn:hover {
+  background: rgba(168, 85, 247, 0.32);
+  border-color: rgba(168, 85, 247, 0.6);
 }
 
 /* ================= BOTONES ================= */
