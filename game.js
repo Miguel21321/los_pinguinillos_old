@@ -70,7 +70,7 @@
       this.y = y;
       this.vx = 0;
       this.vy = 0;
-      this.state = 'AIRBORNE'; // 'GROUNDED' | 'ANCHORED' | 'WALL_CLING' | 'SWINGING' | 'FACEPLANT' | 'AIRBORNE'
+      this.state = 'AIRBORNE'; // 'GROUNDED' | 'ANCHORED' | 'WALL_CLING' | 'SWINGING' | 'FACEPLANT' | 'AIRBORNE' | 'BELLY_SLIDE' | 'PIGGYBACK'
       this.onGround = false;
       this.onIce = false;
       this.touchingWall = false;
@@ -87,11 +87,23 @@
       this.iceMsgTimer = 0;
       this.speech = '';
       this.speechTimer = 0;
+      this.slideTimer = 0;
+      this.carrying = null;
+      this.carriedBy = null;
+      this.squashX = 1;
+      this.squashY = 1;
+      this.blinkTimer = 2.0 + Math.random() * 3.0;
+      this.isBlinking = false;
+      this.skidTimer = 0;
+      this.isEmoting = false;
+      this.emoteTimer = 0;
+      this.highFived = false;
     }
 
     invMass() {
       // Masa infinita si está anclado en suelo o pegado a pared
       if (this.state === 'ANCHORED' || this.state === 'WALL_CLING') return 0;
+      if (this.state === 'PIGGYBACK' || this.carriedBy) return 0;
       return 1;
     }
 
@@ -168,29 +180,46 @@
       this.taut = false;
     }
 
-    update(dt, p1, p2, taut, platforms) {
+    update(dt, p1, p2, taut, platforms, pins = []) {
       this.taut = taut;
       const x1 = p1.x + p1.w / 2;
       const y1 = p1.y + p1.h * 0.55;
       const x2 = p2.x + p2.w / 2;
       const y2 = p2.y + p2.h * 0.55;
 
-      // Si la cuerda está tensa, alinear nodos rígidamente con leve vibración
-      if (taut) {
-        const vib = Math.sin(performance.now() * 0.05) * 0.8;
+      const poly = [{ x: x1, y: y1 }, ...pins.map(p => ({ x: p.x, y: p.y })), { x: x2, y: y2 }];
+      const segLens = [];
+      let totalL = 0;
+      for (let i = 0; i < poly.length - 1; i++) {
+        const d = Math.hypot(poly[i + 1].x - poly[i].x, poly[i + 1].y - poly[i].y) || 0.001;
+        segLens.push(d);
+        totalL += d;
+      }
+
+      // Si la cuerda está tensa o envuelve esquinas, alinear nodos a lo largo de los segmentos con leve vibración
+      if (taut || pins.length > 0) {
+        const vib = taut ? Math.sin(performance.now() * 0.05) * 0.8 : 0;
         for (let i = 0; i < this.n; i++) {
-          const t = i / (this.n - 1);
-          const px = x1 + (x2 - x1) * t;
-          const py = y1 + (y2 - y1) * t + (i > 0 && i < this.n - 1 ? vib : 0);
-          this.pts[i].x = px;
-          this.pts[i].y = py;
-          this.pts[i].ox = px;
-          this.pts[i].oy = py;
+          const targetD = (i / (this.n - 1)) * totalL;
+          let acc = 0;
+          for (let s = 0; s < segLens.length; s++) {
+            if (targetD <= acc + segLens[s] || s === segLens.length - 1) {
+              const u = Math.min(1, Math.max(0, (targetD - acc) / segLens[s]));
+              const px = poly[s].x + (poly[s + 1].x - poly[s].x) * u;
+              const py = poly[s].y + (poly[s + 1].y - poly[s].y) * u + (i > 0 && i < this.n - 1 ? vib : 0);
+              this.pts[i].x = px;
+              this.pts[i].y = py;
+              this.pts[i].ox = px;
+              this.pts[i].oy = py;
+              break;
+            }
+            acc += segLens[s];
+          }
         }
         return;
       }
 
-      // Si la cuerda tiene comba, aplicar física Verlet con gravedad
+      // Si la cuerda tiene comba y no hay pines, física Verlet con gravedad
       const g = 960 * dt * dt;
       for (let i = 1; i < this.n - 1; i++) {
         const p = this.pts[i];
@@ -280,22 +309,33 @@
     windTimer: 4.0,
     windPhase: 'calm', // 'calm' | 'alert' | 'gust'
 
-    // Cuenta atrás cooperativa ("3... 2... 1... ¡YA!")
-    countdownActive: false,
-    countdownTimer: 0,
-    countdownPhase: -1,
-    countdownLastPhase: -1,
+    // Sistema de pines de esquina de cuerda (Dynamic Corner Wrapping)
+    ropePins: [],
+
+    // Sistema de telemetría de caídas ("Trail of Shame")
+    fallSamples: [],
+    fallPeakAlt: 0,
+    fallBannerTimer: 0,
+    shameTrail: [],
+    shameTrailAlpha: 0,
 
     // Bucle principal
     init() {
       this.canvas = document.getElementById('gameCanvas');
       this.ctx = this.canvas.getContext('2d');
+      this.ctx.imageSmoothingEnabled = false;
+      if ('webkitImageSmoothingEnabled' in this.ctx) this.ctx.webkitImageSmoothingEnabled = false;
+      if ('mozImageSmoothingEnabled' in this.ctx) this.ctx.mozImageSmoothingEnabled = false;
+      if ('msImageSmoothingEnabled' in this.ctx) this.ctx.msImageSmoothingEnabled = false;
 
       const resize = () => {
         this.w = window.innerWidth;
         this.h = window.innerHeight;
         this.canvas.width = this.w;
         this.canvas.height = this.h;
+        this.ctx.imageSmoothingEnabled = false;
+        if ('webkitImageSmoothingEnabled' in this.ctx) this.ctx.webkitImageSmoothingEnabled = false;
+        if ('mozImageSmoothingEnabled' in this.ctx) this.ctx.mozImageSmoothingEnabled = false;
       };
       window.addEventListener('resize', resize);
       resize();
@@ -327,10 +367,15 @@
         lastTime = now;
 
         if (this.running && !this.paused) {
-          accumulator += dt;
-          while (accumulator >= fixedStep) {
-            this.updateFixed(fixedStep);
-            accumulator -= fixedStep;
+          // HIT-STOP: Congela la física durante micro-impactos para dar contundencia física táctil
+          if (Camera.hitStopT > 0) {
+            Camera.hitStopT = Math.max(0, Camera.hitStopT - dt);
+          } else {
+            accumulator += dt;
+            while (accumulator >= fixedStep) {
+              this.updateFixed(fixedStep);
+              accumulator -= fixedStep;
+            }
           }
         }
 
@@ -391,6 +436,8 @@
         this.p2 = new Penguin(2, 'Fredo', sp.x + 20, sp.y - 38, '#fb923c', '#fed7aa');
       }
 
+      this.ropePins = [];
+      this.fallSamples = [];
       this.rope = new RopeVisualVerlet(12, src.ropeLength || 185);
       this.rope.reset(this.p1, this.p2);
 
@@ -474,6 +521,8 @@
       } else {
         this.p2.reset(target.x + 18, target.y - 38);
       }
+      this.ropePins = [];
+      this.fallSamples = [];
       this.rope.reset(this.p1, this.p2);
 
       // Restaurar plataformas quebradizas
@@ -551,7 +600,52 @@
       const topY = Math.min(this.p1 ? this.p1.y : 0, this.p2 ? this.p2.y : 0);
       const m = Math.max(0, Math.min(500, Math.round(-topY / window.PIXELS_PER_METER)));
       this.currentAltitude = m;
+      if (m > this.fallPeakAlt) this.fallPeakAlt = m;
       SaveSys.updateMaxAltitude(m);
+    },
+
+    // =======================================================================
+    // EMOTE / CHOCAR LOS CINCO (HIGH-FIVE COOPERATIVO BREAD & FRED)
+    // =======================================================================
+    triggerEmote(pNum) {
+      const p = pNum === 2 && this.p2 ? this.p2 : this.p1;
+      const other = p === this.p1 ? this.p2 : this.p1;
+      if (!p) return;
+
+      p.isEmoting = true;
+      p.emoteTimer = 1.2;
+      p.squashX = 0.86;
+      p.squashY = 1.18;
+      Sfx.squeak('highFive');
+
+      // Si ambos están en el suelo y cerca: ¡Chocar los cinco sincronizado!
+      if (other && p.onGround && other.onGround) {
+        const dist = Math.hypot((p.x + p.w / 2) - (other.x + other.w / 2), (p.y + p.h / 2) - (other.y + other.h / 2));
+        if (dist < 68) {
+          p.facing = p.x < other.x ? 1 : -1;
+          other.facing = other.x < p.x ? 1 : -1;
+          other.isEmoting = true;
+          other.emoteTimer = 1.2;
+          other.squashX = 0.86;
+          other.squashY = 1.18;
+
+          const midX = (p.x + other.x + p.w) / 2;
+          const midY = (p.y + other.y) / 2;
+          this.spawnParticles(midX, midY - 14, '#fbbf24', 12);
+          this.spawnParticles(midX, midY - 18, '#f43f5e', 8);
+          Camera.shake(6, 0.22);
+
+          const cheers = ['¡Choca esos cinco!', '¡Buena esa!', '¡A tope!', '¡Increíble!'];
+          const cheer = cheers[Math.floor(Math.random() * cheers.length)];
+          p.say(cheer, 1.8);
+          other.say(cheer, 1.8);
+        }
+      }
+
+      // Replicar en red si es online
+      if (this.mode === 'online' && Net.conn && Net.connected) {
+        try { Net.conn.send({ type: 'emote', p: pNum }); } catch (e) {}
+      }
     },
 
     // =======================================================================
@@ -798,6 +892,47 @@
         return;
       }
 
+      // =====================================================================
+      // TELEMETRÍA DE CAÍDA ("TRAIL OF SHAME" Y BANNER DE METROS PERDIDOS)
+      // =====================================================================
+      if (this.fallBannerTimer > 0) {
+        this.fallBannerTimer -= dt;
+        if (this.fallBannerTimer <= 0) {
+          document.getElementById('fallBanner')?.classList.add('hidden');
+        }
+      }
+
+      const fallingFast = this.p1 && (this.p1.vy > 380 || (this.p2 && this.p2.vy > 380));
+      if (fallingFast) {
+        const mx = (this.p1.x + (this.p2 ? this.p2.x : this.p1.x)) / 2;
+        const my = (this.p1.y + (this.p2 ? this.p2.y : this.p1.y)) / 2;
+        if (this.fallSamples.length === 0 || Math.hypot(mx - this.fallSamples[this.fallSamples.length - 1].x, my - this.fallSamples[this.fallSamples.length - 1].y) > 30) {
+          this.fallSamples.push({ x: mx, y: my });
+          if (this.fallSamples.length > 70) this.fallSamples.shift();
+        }
+      } else if ((this.p1.onGround || (this.p2 && this.p2.onGround)) && this.fallSamples.length > 4) {
+        const startPt = this.fallSamples[0];
+        const endPt = this.fallSamples[this.fallSamples.length - 1];
+        const dropPx = endPt.y - startPt.y;
+        const dropM = Math.round(dropPx / window.PIXELS_PER_METER);
+        if (dropM >= 8) {
+          this.shameTrail = [...this.fallSamples];
+          this.shameTrailAlpha = 1.0;
+          const banner = document.getElementById('fallBanner');
+          if (banner) {
+            banner.textContent = `💥 ¡Caída de -${dropM}m!`;
+            banner.classList.remove('hidden');
+            this.fallBannerTimer = 3.8;
+          }
+          const pair = FUNNY_FALL_QUOTES[Math.floor(Math.random() * FUNNY_FALL_QUOTES.length)];
+          this.p1.say(pair[0], 3.2);
+          if (this.p2) {
+            setTimeout(() => { if (this.p2) this.p2.say(pair[1], 3.2); }, 1400);
+          }
+        }
+        this.fallSamples = [];
+      }
+
       // Caída al vacío (embudo de castigo por debajo del último checkpoint)
       const refY = (this.checkpoints[this.cpIdx] ? this.checkpoints[this.cpIdx].y : 0) + 650;
       if (Math.max(this.p1.y, this.p2 ? this.p2.y : 0) > refY) {
@@ -970,17 +1105,48 @@
       if (p.draggedTimer > 0) p.draggedTimer -= dt;
       if (p.iceMsgTimer > 0) p.iceMsgTimer -= dt;
 
+      // Actualizar temporizador de parpadeo y squash & stretch
+      p.squashX += (1 - p.squashX) * Math.min(1, dt * 10);
+      p.squashY += (1 - p.squashY) * Math.min(1, dt * 10);
+      p.blinkTimer -= dt;
+      if (p.blinkTimer <= 0) {
+        p.isBlinking = true;
+        if (p.blinkTimer <= -0.16) {
+          p.isBlinking = false;
+          p.blinkTimer = 2.4 + Math.random() * 3.6;
+        }
+      }
+      if (p.emoteTimer > 0) p.emoteTimer -= dt;
+      else p.isEmoting = false;
+
       const assists = SaveSys.cur().assists;
       const infiniteStamina = assists.infiniteStamina;
+
+      // =====================================================================
+      // 0. ESTADO PIGGYBACK (A caballito en la cabeza del compañero)
+      // =====================================================================
+      if (p.carriedBy) {
+        const c = p.carriedBy;
+        p.x = c.x + (c.w - p.w) / 2;
+        p.y = c.y - p.h + 8;
+        p.vx = c.vx;
+        p.vy = c.vy;
+        p.facing = c.facing;
+        p.onGround = true;
+        p.anim += dt * 7;
+        p.state = 'PIGGYBACK';
+        return;
+      }
 
       // =====================================================================
       // 1. ESTADO FACEPLANT (Estampado tras gran caída)
       // =====================================================================
       if (p.state === 'FACEPLANT') {
         p.vx = 0;
-        // Solo se levanta si el jugador pulsa Izquierda, Derecha o Salto
         if (cmd.left || cmd.right || cmd.jump) {
           p.state = p.onGround ? 'GROUNDED' : 'AIRBORNE';
+          p.squashX = 0.9;
+          p.squashY = 1.15;
           this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#e2e8f0', 8);
         }
         if (!p.onGround) p.state = 'AIRBORNE';
@@ -993,7 +1159,6 @@
         p.vx = 0;
         p.vy = 0;
         p.staminaTimer = WALL_CLING_MAX_TIME;
-        // Desanclar si se suelta Grab o si se pierde el suelo
         if (!cmd.grab || !p.onGround) {
           p.state = p.onGround ? 'GROUNDED' : 'AIRBORNE';
         }
@@ -1008,15 +1173,13 @@
           p.staminaTimer = Math.max(0, p.staminaTimer - dt);
         }
 
-        // Si se agota la stamina: soltar a la fuerza
         if (p.staminaTimer <= 0) {
           p.grabLocked = true;
           p.state = 'AIRBORNE';
           p.vy = 60;
           p.say("¡Se me resbala el piolet!", 1.8);
-        }
-        // En los últimos 1.2s: resbalar lentamente hacia abajo
-        else if (p.staminaTimer <= WALL_LOW_TIME) {
+          Sfx.squeak('panic');
+        } else if (p.staminaTimer <= WALL_LOW_TIME) {
           p.vy = WALL_SLIDE_SPEED;
           if (Math.random() < dt * 14) {
             this.spawnParticles(p.x + p.w / 2 + p.wallDir * 8, p.y + p.h / 2, '#38bdf8', 1);
@@ -1033,21 +1196,56 @@
           p.facing = -p.wallDir;
           p.state = 'AIRBORNE';
           p.clingCooldown = 0.14;
+          p.squashX = 0.84;
+          p.squashY = 1.2;
+          Sfx.squeak('jump');
           Sfx.jump();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#e0f2fe', 8);
         }
 
-        // Si se suelta Grab o ya no toca la pared
         if (p.state === 'WALL_CLING' && (!cmd.grab || !p.touchingWall)) {
           p.state = 'AIRBORNE';
         }
       }
 
       // =====================================================================
-      // 4. ESTADO SWINGING (En el aire con cuerda tensa al máximo)
+      // 4. ESTADO BELLY_SLIDE (Panzazo / Tobogán sobre la barriga)
+      // =====================================================================
+      else if (p.state === 'BELLY_SLIDE') {
+        p.slideTimer += dt;
+        const friction = p.onIce ? 0.996 : 0.964;
+        p.vx *= Math.pow(friction, dt * 60);
+
+        if (cmd.left && p.vx > -GROUND_MAX_SPD * 1.35) p.vx -= 440 * dt;
+        if (cmd.right && p.vx < GROUND_MAX_SPD * 1.35) p.vx += 440 * dt;
+
+        if (Math.abs(p.vx) > 35 && Math.random() < dt * 25) {
+          this.spawnParticles(p.x + (p.facing > 0 ? 0 : p.w), p.y + p.h - 2, '#fff', 2);
+        }
+
+        // Salto catapultado desde el panzazo (Slide-Jump)
+        if (cmd.jump && !p.jumpHeld) {
+          p.jumpHeld = true;
+          p.vy = -340;
+          p.vx = Math.sign(p.vx || p.facing) * Math.max(Math.abs(p.vx) * 1.25, 310);
+          p.state = 'AIRBORNE';
+          p.squashX = 0.82;
+          p.squashY = 1.22;
+          Sfx.squeak('jump');
+          this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#38bdf8', 10);
+        }
+
+        if (!p.onGround) {
+          p.state = 'AIRBORNE';
+        } else if (Math.abs(p.vx) < 18 || (!cmd.down && !p.onIce)) {
+          p.state = 'GROUNDED';
+        }
+      }
+
+      // =====================================================================
+      // 5. ESTADO SWINGING (En el aire con cuerda tensa al máximo)
       // =====================================================================
       else if (p.state === 'SWINGING') {
-        // Bombeo tangencial con Izquierda/Derecha
         const pumpDir = (cmd.right ? 1 : 0) - (cmd.left ? 1 : 0);
         if (pumpDir !== 0 && other) {
           p.facing = pumpDir;
@@ -1060,26 +1258,76 @@
           p.vy = Math.min(p.vy, -SLING_JUMP_VY);
           p.vx = Math.max(-SLING_JUMP_MAX_VX, Math.min(SLING_JUMP_MAX_VX, p.vx * 1.25));
           p.state = 'AIRBORNE';
+          p.squashX = 0.8;
+          p.squashY = 1.25;
+          Sfx.squeak('jump');
           Sfx.jump();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#fff', 8);
         }
 
-        // Agarre a pared desde el balanceo
         if (p.state === 'SWINGING' && cmd.grab && p.touchingWall && !p.grabLocked && p.clingCooldown <= 0 && p.staminaTimer > 0) {
           p.state = 'WALL_CLING';
           p.vx = 0;
           p.vy = 0;
+          Sfx.squeak('grunt');
           Sfx.pick();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h / 2, '#e0f2fe', 6);
         }
       }
 
       // =====================================================================
-      // 5. ESTADO GROUNDED (En suelo firme)
+      // 6. ESTADO GROUNDED (En suelo firme)
       // =====================================================================
       else if (p.state === 'GROUNDED') {
         const accel = p.onIce ? ICE_ACCEL : GROUND_ACCEL;
-        const maxSpd = p.onIce ? ICE_MAX_SPD : GROUND_MAX_SPD;
+        const maxSpd = p.carrying ? (p.onIce ? ICE_MAX_SPD * 0.85 : GROUND_MAX_SPD * 0.85) : (p.onIce ? ICE_MAX_SPD : GROUND_MAX_SPD);
+
+        // Si está llevando al compañero a caballito
+        if (p.carrying) {
+          const pass = p.carrying;
+          // Lanzar al compañero con Salto (W)
+          if (cmd.jump && !p.jumpHeld) {
+            p.jumpHeld = true;
+            p.carrying = null;
+            pass.carriedBy = null;
+            pass.state = 'AIRBORNE';
+            pass.vx = p.facing * 440 + p.vx * 0.5;
+            pass.vy = -490;
+            pass.jumpHeld = true;
+            pass.jumpHoldTimer = 0.15;
+            pass.squashX = 0.82;
+            pass.squashY = 1.24;
+            Sfx.squeak('jump');
+            Sfx.pick();
+            p.say("¡Vuela!", 1.2);
+            this.spawnParticles(pass.x + pass.w / 2, pass.y + pass.h, '#fff', 8);
+          } else if (!cmd.grab && !cmd.down) {
+            p.carrying = null;
+            pass.carriedBy = null;
+            pass.state = 'GROUNDED';
+          }
+        }
+        // Si no lleva a nadie: opción de coger al compañero a caballito
+        else if (other && other.state === 'GROUNDED' && !other.carrying && !other.carriedBy && this.mode !== 'solo') {
+          const distMid = Math.hypot((p.x + p.w / 2) - (other.x + other.w / 2), (p.y + p.h / 2) - (other.y + other.h / 2));
+          if (distMid < 36 && cmd.grab && cmd.down) {
+            p.carrying = other;
+            other.carriedBy = p;
+            other.state = 'PIGGYBACK';
+            Sfx.pick();
+            p.say("¡A caballito!", 1.2);
+          }
+        }
+
+        // Panzazo: lanzarse de barriga al pulsar abajo en carrera
+        if (cmd.down && (Math.abs(p.vx) > 30 || cmd.left || cmd.right) && !p.carrying) {
+          p.state = 'BELLY_SLIDE';
+          p.slideTimer = 0;
+          p.squashX = 1.34;
+          p.squashY = 0.66;
+          Sfx.slide();
+          this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#e0f2fe', 6);
+        }
 
         if (cmd.left) {
           p.vx = Math.max(-maxSpd, p.vx - accel * dt);
@@ -1094,18 +1342,32 @@
           p.vx *= Math.pow(slippery ? 0.985 : 0.76, dt * 60);
         }
 
-        // Salto individual bajo
-        if (cmd.jump && !p.jumpHeld) {
+        // Skid dust al cambiar de sentido bruscamente
+        if (Math.abs(p.vx) > 60 && ((p.vx > 0 && cmd.left) || (p.vx < 0 && cmd.right))) {
+          p.skidTimer += dt;
+          if (Math.random() < dt * 18) {
+            Sfx.skid();
+            this.spawnParticles(p.x + p.w / 2, p.y + p.h - 2, '#cbd5e1', 3);
+          }
+        } else {
+          p.skidTimer = 0;
+        }
+
+        // Salto individual
+        if (cmd.jump && !p.jumpHeld && !p.carrying) {
           p.jumpHeld = true;
           p.jumpHoldTimer = JUMP_HOLD_T;
           p.vy = -JUMP_V;
           p.state = 'AIRBORNE';
+          p.squashX = 0.84;
+          p.squashY = 1.22;
+          Sfx.squeak('jump');
           Sfx.jump();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h, '#fff', 6);
         }
 
         // Anclarse con piolet en suelo
-        if (cmd.grab && p.state === 'GROUNDED') {
+        if (cmd.grab && !cmd.down && p.state === 'GROUNDED' && !p.carrying) {
           if (p.onIce) {
             if (p.iceMsgTimer <= 0) {
               p.say("¡El piolet resbala en el hielo!", 1.6);
@@ -1115,6 +1377,8 @@
             p.state = 'ANCHORED';
             p.vx = 0;
             p.vy = 0;
+            p.squashX = 1.24;
+            p.squashY = 0.76;
             Sfx.pick();
             this.spawnParticles(p.x + p.w / 2, p.y + p.h / 2, '#e0f2fe', 6);
           }
@@ -1122,7 +1386,7 @@
       }
 
       // =====================================================================
-      // 6. ESTADO AIRBORNE (En el aire libre)
+      // 7. ESTADO AIRBORNE (En el aire libre)
       // =====================================================================
       else {
         if (cmd.left) {
@@ -1133,11 +1397,11 @@
           p.facing = 1;
         }
 
-        // Agarre a pared vertical en el aire
         if (cmd.grab && p.touchingWall && !p.onGround && !p.grabLocked && p.clingCooldown <= 0 && p.staminaTimer > 0) {
           p.state = 'WALL_CLING';
           p.vx = 0;
           p.vy = 0;
+          Sfx.squeak('grunt');
           Sfx.pick();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h / 2, '#e0f2fe', 6);
         }
@@ -1160,7 +1424,6 @@
         p.vy = Math.min(MAX_FALL, p.vy + GRAVITY * dt);
       }
 
-      // Fricción aérea sutil
       if (!p.onGround && p.state !== 'WALL_CLING' && p.state !== 'ANCHORED') {
         p.vx *= Math.pow(0.998, dt * 60);
       }
@@ -1176,11 +1439,17 @@
 
       // Transición al aterrizar
       if (!wasGround && p.onGround) {
+        p.squashX = 1.25;
+        p.squashY = 0.75;
         if (p.impactVy >= FACEPLANT_CRITICAL_VY && p.state !== 'ANCHORED') {
           p.state = 'FACEPLANT';
           p.vx = 0;
           p.vy = 0;
-          Camera.shake(14, 0.45);
+          p.squashX = 1.45;
+          p.squashY = 0.55;
+          Camera.hitStop(0.06);
+          Camera.shake(16, 0.45);
+          Sfx.squeak('panic');
           Sfx.faceplant();
           this.spawnParticles(p.x + p.w / 2, p.y + p.h / 2, '#e2e8f0', 16);
           p.say("¡SPLAT!", 1.2);
@@ -1343,6 +1612,76 @@
     },
 
     // =======================================================================
+    // DETECCIÓN Y GESTIÓN DE PINES DE CUERDA (DYNAMIC CORNER WRAPPING)
+    // =======================================================================
+    checkCornerPinning(c1x, c1y, c2x, c2y) {
+      if (this.ropePins.length >= 4) return;
+
+      const pA = this.ropePins.length > 0 ? this.ropePins[this.ropePins.length - 1] : { x: c1x, y: c1y };
+      const pB = { x: c2x, y: c2y };
+
+      const minX = Math.min(pA.x, pB.x) - 12;
+      const maxX = Math.max(pA.x, pB.x) + 12;
+      const minY = Math.min(pA.y, pB.y) - 12;
+      const maxY = Math.max(pA.y, pB.y) + 12;
+
+      const allPlats = [...this.platforms, ...this.movingPlatforms];
+      for (const pl of allPlats) {
+        if (pl.broken) continue;
+        if (pl.x + pl.w < minX || pl.x > maxX || pl.y + pl.h < minY || pl.y > maxY) continue;
+
+        const corners = [
+          { x: pl.x, y: pl.y, type: 'TL' },
+          { x: pl.x + pl.w, y: pl.y, type: 'TR' },
+          { x: pl.x, y: pl.y + pl.h, type: 'BL' },
+          { x: pl.x + pl.w, y: pl.y + pl.h, type: 'BR' }
+        ];
+
+        for (const c of corners) {
+          if (this.ropePins.some(p => Math.hypot(p.x - c.x, p.y - c.y) < 14)) continue;
+
+          const dx = pB.x - pA.x;
+          const dy = pB.y - pA.y;
+          const lenSq = dx * dx + dy * dy;
+          if (lenSq === 0) continue;
+
+          const u = Math.max(0, Math.min(1, ((c.x - pA.x) * dx + (c.y - pA.y) * dy) / lenSq));
+          const projX = pA.x + u * dx;
+          const projY = pA.y + u * dy;
+          const distToSeg = Math.hypot(c.x - projX, c.y - projY);
+
+          if (distToSeg < 9 && u > 0.08 && u < 0.92) {
+            const cross = (c.x - pA.x) * (pB.y - c.y) - (c.y - pA.y) * (pB.x - c.x);
+            const sign = Math.sign(cross) || 1;
+            this.ropePins.push({ x: c.x, y: c.y, plat: pl, type: c.type, sign });
+            Sfx.tone(360, 0.05, 'sine', 0.025);
+            return;
+          }
+        }
+      }
+    },
+
+    checkCornerUnpinning(c1x, c1y, c2x, c2y) {
+      if (this.ropePins.length === 0) return;
+      const lastPin = this.ropePins[this.ropePins.length - 1];
+      const prevPt = this.ropePins.length > 1 ? this.ropePins[this.ropePins.length - 2] : { x: c1x, y: c1y };
+      const nextPt = { x: c2x, y: c2y };
+
+      if (lastPin.plat && lastPin.plat.broken) {
+        this.ropePins.pop();
+        return;
+      }
+
+      const cross = (lastPin.x - prevPt.x) * (nextPt.y - lastPin.y) - (lastPin.y - prevPt.y) * (nextPt.x - lastPin.x);
+      const curSign = Math.sign(cross);
+
+      if (curSign !== 0 && curSign !== lastPin.sign) {
+        this.ropePins.pop();
+        Sfx.tone(260, 0.04, 'triangle', 0.02);
+      }
+    },
+
+    // =======================================================================
     // MOTOR DE CUERDA RÍGIDA (DISTANCE JOINT UNILATERAL + MOMENTUM TRANSFER)
     // =======================================================================
     solveRigidRope(dt) {
@@ -1355,52 +1694,70 @@
       const c2x = p2.x + p2.w / 2;
       const c2y = p2.y + p2.h * 0.55;
 
-      const dx = c2x - c1x;
-      const dy = c2y - c1y;
+      // Actualizar detección de esquinas para Rope Corner Wrapping
+      if (this.ropePins.length === 0) {
+        this.checkCornerPinning(c1x, c1y, c2x, c2y);
+      } else {
+        this.checkCornerUnpinning(c1x, c1y, c2x, c2y);
+        const last = this.ropePins[this.ropePins.length - 1];
+        this.checkCornerPinning(last.x, last.y, c2x, c2y);
+      }
+
+      // Calcular longitud fija consumida por los pines
+      let pinnedLen = 0;
+      let prevPt = { x: c1x, y: c1y };
+      for (const pin of this.ropePins) {
+        pinnedLen += Math.hypot(pin.x - prevPt.x, pin.y - prevPt.y);
+        prevPt = pin;
+      }
+
+      const maxTotalL = this.lvl.ropeLength || 185;
+      const freeL = Math.max(26, maxTotalL - pinnedLen);
+
+      // El pivote efectivo para la cuerda activa
+      const pivot = this.ropePins.length > 0 ? this.ropePins[this.ropePins.length - 1] : { x: c1x, y: c1y };
+      const dx = c2x - pivot.x;
+      const dy = c2y - pivot.y;
       const dist = Math.hypot(dx, dy) || 0.001;
-      const maxL = this.lvl.ropeLength || 185;
 
       // Estado de cuerda tensa
-      this.ropeTaut = dist >= maxL - 1;
-      this.rope.update(dt, p1, p2, this.ropeTaut, this.platforms);
+      this.ropeTaut = dist >= freeL - 1;
+      this.rope.update(dt, p1, p2, this.ropeTaut, this.platforms, this.ropePins);
 
-      // Si la distancia es menor al límite, movimiento 100% independiente
-      if (dist <= maxL) return;
+      if (dist <= freeL) return;
 
-      // Vector unitario de la cuerda y vector tangente perpendicular
       const nx = dx / dist;
       const ny = dy / dist;
       const tx = -ny;
       const ty = nx;
 
-      const w1 = p1.invMass();
+      const w1 = this.ropePins.length > 0 ? 0 : p1.invMass();
       const w2 = p2.invMass();
       const totalW = w1 + w2;
-      if (totalW <= 0) return; // Ambos anclados inamovibles
+      if (totalW <= 0) return;
 
-      // 1. Corrección posicional rígida sin elasticidad de muelle
-      const over = dist - maxL;
-      p1.x += nx * over * (w1 / totalW);
-      p1.y += ny * over * (w1 / totalW);
+      const over = dist - freeL;
+      if (this.ropePins.length === 0) {
+        p1.x += nx * over * (w1 / totalW);
+        p1.y += ny * over * (w1 / totalW);
+      }
       p2.x -= nx * over * (w2 / totalW);
       p2.y -= ny * over * (w2 / totalW);
 
-      // 2. Velocidad relativa radial (alejamiento)
-      const relVx = p2.vx - p1.vx;
-      const relVy = p2.vy - p1.vy;
+      const relVx = p2.vx - (this.ropePins.length > 0 ? 0 : p1.vx);
+      const relVy = p2.vy - (this.ropePins.length > 0 ? 0 : p1.vy);
       const rvn = relVx * nx + relVy * ny;
 
-      // Eliminar componente radial y transformar caída en velocidad tangencial pura
       if (rvn > 0) {
-        // Transferencia de momento lineal
         const impulse = rvn / totalW;
-        p1.vx += nx * impulse * w1;
-        p1.vy += ny * impulse * w1;
+        if (this.ropePins.length === 0) {
+          p1.vx += nx * impulse * w1;
+          p1.vy += ny * impulse * w1;
+        }
         p2.vx -= nx * impulse * w2;
         p2.vy -= ny * impulse * w2;
 
-        // Si uno es pivote fijo (invMass = 0) y el otro está en el aire:
-        // Convertir la caída vertical en velocidad tangencial pura de oscilación
+        // Péndulo de 360 grados y oscilación con conversión de caída a velocidad tangencial pura
         if (w1 === 0 && w2 === 1 && !p2.onGround) {
           const tangSpeed = p2.vx * tx + p2.vy * ty;
           const fallingEnergy = Math.max(0, p2.vy);
@@ -1411,7 +1768,14 @@
           p2.vy = finalTang * ty;
           p2.state = 'SWINGING';
           Sfx.ropeTension();
-        } else if (w2 === 0 && w1 === 1 && !p1.onGround) {
+
+          // Hit-stop táctico en tirón súbito de cuerda
+          if (rvn > 480) {
+            Camera.hitStop(0.035);
+            Camera.shake(7, 0.22);
+            Sfx.squeak('panic');
+          }
+        } else if (w2 === 0 && w1 === 1 && !p1.onGround && this.ropePins.length === 0) {
           const tangSpeed = p1.vx * tx + p1.vy * ty;
           const fallingEnergy = Math.max(0, p1.vy);
           const swingDir = tangSpeed !== 0 ? Math.sign(tangSpeed) : -Math.sign(nx);
@@ -1421,9 +1785,14 @@
           p1.vy = finalTang * ty;
           p1.state = 'SWINGING';
           Sfx.ropeTension();
+
+          if (rvn > 480) {
+            Camera.hitStop(0.035);
+            Camera.shake(7, 0.22);
+            Sfx.squeak('panic');
+          }
         }
 
-        // Arrastre por el suelo si el compañero que cae no encuentra anclaje
         if (w1 === 1 && p1.onGround && w2 === 0) p1.draggedTimer = 0.2;
         if (w2 === 1 && p2.onGround && w1 === 0) p2.draggedTimer = 0.2;
         if (w1 === 1 && p1.onGround && w2 === 1 && !p2.onGround) p1.draggedTimer = 0.25;
@@ -1828,6 +2197,47 @@
         ctx.fillText('🏁 CUMBRE 500m', g.x + g.w / 2, g.y + 25);
       }
 
+      // 9.5 Rastro de telemetría de caída ("Trail of Shame")
+      if (this.shameTrail && this.shameTrail.length > 1 && this.shameTrailAlpha > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, this.shameTrailAlpha);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 6]);
+        ctx.beginPath();
+        this.shameTrail.forEach((pt, i) => (i === 0 ? ctx.moveTo(pt.x, pt.y) : ctx.lineTo(pt.x, pt.y)));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = '#f87171';
+        for (let i = 1; i < this.shameTrail.length; i += 3) {
+          const pt = this.shameTrail[i];
+          ctx.beginPath();
+          ctx.moveTo(pt.x, pt.y + 7);
+          ctx.lineTo(pt.x - 5, pt.y - 4);
+          ctx.lineTo(pt.x + 5, pt.y - 4);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+        this.shameTrailAlpha = Math.max(0, this.shameTrailAlpha - dt * 0.22);
+      }
+
+      // Pines de esquinas envueltas (Carabineros de contacto)
+      if (this.ropePins && this.ropePins.length > 0) {
+        for (const pin of this.ropePins) {
+          ctx.save();
+          ctx.fillStyle = '#fbbf24';
+          ctx.strokeStyle = '#78350f';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(pin.x, pin.y, 4.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+
       // 10. Cuerda (Tensa con vibración sutil vs Comba Verlet)
       if (this.rope) {
         ctx.strokeStyle = this.rope.taut ? '#fbbf24' : '#d97706';
@@ -1883,7 +2293,7 @@
     },
 
     // =======================================================================
-    // DIBUJO DETALLADO DEL PINGÜINO
+    // DIBUJO DETALLADO DEL PINGÜINO (16-BIT RETRO PIXEL-ART EXACTO)
     // =======================================================================
     drawPenguin(ctx, p, isActiveSolo) {
       if (!p) return;
@@ -1891,9 +2301,13 @@
 
       const moving = Math.abs(p.vx) > 12 && p.onGround;
       const walkCycle = moving ? Math.sin(p.anim * 1.5) : 0;
-      const tilt = p.state === 'FACEPLANT'
-        ? p.facing * 1.45
-        : (moving ? walkCycle * 0.08 : (!p.onGround ? Math.max(-0.24, Math.min(0.24, p.vy * 0.0004)) : 0));
+      const isSlide = p.state === 'BELLY_SLIDE';
+      const isFaceplant = p.state === 'FACEPLANT';
+      const isPiggy = p.state === 'PIGGYBACK';
+      const isPanic = !p.onGround && p.vy > 550;
+      const tilt = isFaceplant
+        ? p.facing * 1.5
+        : (isSlide ? p.facing * 0.22 : (moving ? walkCycle * 0.08 : (!p.onGround ? Math.max(-0.24, Math.min(0.24, p.vy * 0.0004)) : 0)));
 
       ctx.translate(p.x + p.w / 2, p.y + p.h / 2);
 
@@ -1932,29 +2346,47 @@
         ctx.fill();
       }
 
-      // Aplastado contra el suelo si está ANCHORED
+      // Deformaciones físicas por estado: squash & stretch elástico
       if (p.state === 'ANCHORED') {
-        ctx.scale(1.14, 0.76);
+        ctx.scale(1.22, 0.72);
+      } else if (isSlide) {
+        ctx.scale(1.36, 0.62);
+      } else if (isFaceplant) {
+        ctx.scale(1.42, 0.58);
+      } else {
+        ctx.scale(p.squashX || 1, p.squashY || 1);
       }
 
       const lowCling = p.state === 'WALL_CLING' && p.staminaTimer <= WALL_LOW_TIME;
 
       // 1. Patitas naranjas animadas
-      const footLiftL = moving ? Math.max(0, Math.sin(p.anim * 1.6)) * 4 : (!p.onGround ? 2 : 0);
-      const footLiftR = moving ? Math.max(0, -Math.sin(p.anim * 1.6)) * 4 : (!p.onGround ? -2 : 0);
       ctx.fillStyle = '#f97316';
-      ctx.beginPath();
-      ctx.ellipse(-6, p.h / 2 - 2 - footLiftL, 6.5, 3.6, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.ellipse(6, p.h / 2 - 2 - footLiftR, 6.5, 3.6, 0, 0, Math.PI * 2);
-      ctx.fill();
+      if (isSlide) {
+        // En panzazo las patitas se levantan por detrás
+        ctx.beginPath();
+        ctx.ellipse(-p.facing * 12, -4, 5.5, 3.2, p.facing * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const footLiftL = moving ? Math.max(0, Math.sin(p.anim * 1.6)) * 4 : (!p.onGround ? 2 : 0);
+        const footLiftR = moving ? Math.max(0, -Math.sin(p.anim * 1.6)) * 4 : (!p.onGround ? -2 : 0);
+        ctx.beginPath();
+        ctx.ellipse(-6, p.h / 2 - 2 - footLiftL, 6.5, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(6, p.h / 2 - 2 - footLiftR, 6.5, 3.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-      // 2. Cuerpo negro
+      // 2. Silueta retro del cuerpo (chunky rounded egg)
       ctx.fillStyle = '#0f172a';
       ctx.beginPath();
       ctx.ellipse(0, 1, p.w / 2, p.h / 2 - 3, 0, 0, Math.PI * 2);
       ctx.fill();
+
+      // Borde exterior pixel-art oscuro
+      ctx.strokeStyle = '#020617';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
 
       // Parpadeo rojo en Wall Cling bajo de stamina
       if (lowCling) {
@@ -1968,24 +2400,45 @@
         }
       }
 
-      // 3. Barriga blanca
+      // 3. Barriga blanca acolchada
       ctx.fillStyle = '#f8fafc';
       ctx.beginPath();
-      ctx.ellipse(p.facing * 2.5, 3.5, p.w / 2.9, p.h / 2.6, 0, 0, Math.PI * 2);
+      if (isSlide) {
+        // Barriga orientada hacia el suelo durante el deslizamiento
+        ctx.ellipse(0, p.h / 4 + 2, p.w / 2.2, p.h / 3.4, 0, 0, Math.PI * 2);
+      } else {
+        ctx.ellipse(p.facing * 2.5, 3.5, p.w / 2.9, p.h / 2.6, 0, 0, Math.PI * 2);
+      }
       ctx.fill();
 
-      // 4. Arnés de cuerda
+      // 4. Arnés de escalada y mosquetón de anclaje de cuerda
       ctx.fillStyle = p.color;
       ctx.fillRect(-p.w / 2 + 2, 4, p.w - 4, 4.5);
+      // Mosquetón metálico dorado con brillo
       ctx.fillStyle = '#fbbf24';
+      ctx.strokeStyle = '#92400e';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(0, 6.2, 3, 0, Math.PI * 2);
+      ctx.arc(0, 6.2, 3.2, 0, Math.PI * 2);
       ctx.fill();
+      ctx.stroke();
 
-      // 5. Aleta animada
-      const wingAngle = !p.onGround ? -0.55 : (moving ? walkCycle * 0.35 : 0.15);
+      // 5. Aleta animada con estados (panzazo, a caballito, pánico, emote)
       ctx.save();
-      ctx.translate(-p.facing * 3, 0);
+      let wingAngle = 0.15;
+      if (p.isEmoting) {
+        wingAngle = -1.6;
+      } else if (isPanic) {
+        wingAngle = -1.4 + Math.sin(performance.now() * 0.04) * 0.35;
+      } else if (isPiggy) {
+        wingAngle = -1.1 + Math.sin(performance.now() * 0.02) * 0.3;
+      } else if (!p.onGround) {
+        wingAngle = -0.55;
+      } else if (moving) {
+        wingAngle = walkCycle * 0.35;
+      }
+
+      ctx.translate(-p.facing * 3, isSlide ? 4 : 0);
       ctx.rotate(p.facing * wingAngle);
       ctx.fillStyle = '#1e293b';
       ctx.beginPath();
@@ -1993,22 +2446,16 @@
       ctx.fill();
       ctx.restore();
 
-      // 6. Ojos expresivos
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(p.facing * 5.5, -5.5, 4.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#090d16';
-      ctx.beginPath();
-      ctx.arc(p.facing * 6.8, -5.5, 2.2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(p.facing * 7.3, -6.3, 0.8, 0, Math.PI * 2);
-      ctx.fill();
+      // Destello de chocar los cinco si está en emote
+      if (p.isEmoting) {
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(p.facing * 14, -p.h / 2 - 2, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
 
-      // Ojos en cruz si está estampado en Faceplant
-      if (p.state === 'FACEPLANT') {
+      // 6. Ojos expresivos con animación de parpadeo, pánico y faceplant
+      if (isFaceplant) {
         ctx.strokeStyle = '#0f172a';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -2017,29 +2464,95 @@
         ctx.moveTo(p.facing * 9.5, -8);
         ctx.lineTo(p.facing * 3.5, -3);
         ctx.stroke();
+
+        const rotS = performance.now() * 0.005;
+        ctx.fillStyle = '#fbbf24';
+        for (let i = 0; i < 3; i++) {
+          const ang = rotS + (i * Math.PI * 2) / 3;
+          ctx.beginPath();
+          ctx.arc(Math.cos(ang) * 14, -p.h / 2 - 12 + Math.sin(ang) * 4, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (p.isBlinking) {
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p.facing * 4, -5.5);
+        ctx.lineTo(p.facing * 9.5, -5.5);
+        ctx.stroke();
+      } else if (isPanic) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(p.facing * 6, -6, 6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#090d16';
+        ctx.beginPath();
+        ctx.arc(p.facing * 7, -6, 2, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (isPiggy || p.isEmoting) {
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(p.facing * 6, -5, 3.5, Math.PI, 0);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(p.facing * 5.5, -5.5, 4.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#090d16';
+        ctx.beginPath();
+        ctx.arc(p.facing * 6.8, -5.5, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(p.facing * 7.3, -6.3, 0.8, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      // 7. Pico naranja
+      // 7. Pico naranja con apertura al gritar
       ctx.fillStyle = '#fb923c';
       ctx.beginPath();
-      ctx.moveTo(p.facing * 9, -4.5);
-      ctx.lineTo(p.facing * 18.5, -1.5);
-      ctx.lineTo(p.facing * 9, 2);
-      ctx.closePath();
+      if (isPanic) {
+        ctx.moveTo(p.facing * 8, -6);
+        ctx.lineTo(p.facing * 19, -3);
+        ctx.lineTo(p.facing * 8, 4);
+        ctx.closePath();
+      } else {
+        ctx.moveTo(p.facing * 9, -4.5);
+        ctx.lineTo(p.facing * 18.5, -1.5);
+        ctx.lineTo(p.facing * 9, 2);
+        ctx.closePath();
+      }
       ctx.fill();
 
-      // 8. Gorro de lana con pompón
+      // 8. Gorro de lana tejido retro con pompón esponjoso y textura de punto
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, -8.5, p.w / 2 - 0.5, Math.PI, 0);
       ctx.fill();
+
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.18)';
+      ctx.lineWidth = 1.2;
+      for (let rx = -p.w / 3; rx <= p.w / 3; rx += 5) {
+        ctx.beginPath();
+        ctx.moveTo(rx, -9);
+        ctx.lineTo(rx * 0.7, -19);
+        ctx.stroke();
+      }
+
       ctx.fillStyle = p.hatTrim;
       ctx.beginPath();
       ctx.roundRect(-p.w / 2, -11, p.w, 4.5, 2);
       ctx.fill();
+
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.arc(0, -20.5, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.7)';
+      ctx.beginPath();
+      ctx.arc(1, -21.5, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
       // 9. Piolet en mano
@@ -2101,7 +2614,7 @@
 
       ctx.rotate(j.carried ? 0 : j.spin);
 
-      // Silueta de roca facetada
+      // Silueta de roca facetada con sombreado pixel-art
       ctx.fillStyle = '#64748b';
       ctx.beginPath();
       ctx.moveTo(-j.w / 2 + 4, j.h / 2);
@@ -2113,37 +2626,42 @@
       ctx.closePath();
       ctx.fill();
 
-      // Detalles de piedra
+      // Borde exterior
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // Facetas y grietas de piedra
       ctx.fillStyle = '#475569';
       ctx.beginPath();
-      ctx.arc(-8, 4, 3, 0, Math.PI * 2);
+      ctx.arc(-8, 4, 3.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(9, 7, 2.2, 0, Math.PI * 2);
+      ctx.arc(9, 7, 2.5, 0, Math.PI * 2);
       ctx.fill();
 
       // Ojos de Jeff que miran hacia P1
       ctx.fillStyle = '#f8fafc';
       ctx.beginPath();
-      ctx.arc(-6, -2, 3.4, 0, Math.PI * 2);
+      ctx.arc(-6, -2, 3.6, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(6, -2, 3.4, 0, Math.PI * 2);
+      ctx.arc(6, -2, 3.6, 0, Math.PI * 2);
       ctx.fill();
 
       const lookX = this.p1 ? Math.sign((this.p1.x - j.x) || 1) : 1;
       ctx.fillStyle = '#0f172a';
       ctx.beginPath();
-      ctx.arc(-6 + lookX * 1.2, -2, 1.7, 0, Math.PI * 2);
+      ctx.arc(-6 + lookX * 1.3, -2, 1.8, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(6 + lookX * 1.2, -2, 1.7, 0, Math.PI * 2);
+      ctx.arc(6 + lookX * 1.3, -2, 1.8, 0, Math.PI * 2);
       ctx.fill();
 
       // Resplandor de anclaje
       if (j.state === 'ANCHORED') {
         ctx.strokeStyle = '#fbbf24';
-        ctx.lineWidth = 2.2;
+        ctx.lineWidth = 2.4;
         ctx.beginPath();
         ctx.moveTo(-j.w / 2 - 6, -j.h / 2 - 8);
         ctx.lineTo(j.w / 2 + 6, -j.h / 2 - 8);

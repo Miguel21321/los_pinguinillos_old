@@ -12,8 +12,9 @@
   <canvas id="gameCanvas"></canvas>
   <div id="saveToast">💾 Progreso guardado</div>
 
-  <!-- AVISO DE VIENTO / CUENTA ATRÁS -->
+  <!-- AVISO DE VIENTO / TELEMETRÍA DE CAÍDA -->
   <div id="windAlert" class="wind-banner hidden">💨 ¡RÁFAGA DE VIENTO INMINENTE! ¡ÁNCLATE CON S / ▼!</div>
+  <div id="fallBanner" class="fall-banner hidden">💥 ¡Caída de -0m!</div>
 
   <!-- HUD SUPERIOR BREAD & FRED COMPACTO -->
   <div id="hud">
@@ -55,6 +56,7 @@
     <!-- BOTONES DE ACCIÓN RÁPIDA -->
     <div class="hud-right">
       <button class="btn btn-icon btn-cd" id="btnCountdown" title="Cuenta atrás 3... 2... 1... ¡YA! (Tecla C)">⏱️ 3-2-1</button>
+      <button class="btn btn-icon" id="btnEmote" title="Chocar los cinco / Celebrar (Tecla E)">✋ Chocar</button>
       <button class="btn btn-icon" id="btnAssists" title="Ayudas y Accesibilidad Bread & Fred">🛠️ Ayudas</button>
       <button class="btn btn-icon" id="btnQuickMode" title="Alternar modo de juego">🎮 2J</button>
       <button class="btn btn-icon" id="btnHudSave" title="Gestor de Partidas">💾</button>
@@ -74,9 +76,10 @@
     <div class="t-group">
       <button class="t-btn t-btn-sm" id="tPull" title="Recoger Cuerda / Polea (R)">🪢</button>
       <button class="t-btn t-btn-sm" id="tCd" title="Cuenta atrás (C)">⏱️</button>
+      <button class="t-btn t-btn-sm" id="tEmote" title="Chocar los cinco / Celebrar (E)">✋</button>
       <button class="t-btn t-btn-sm" id="tFlag" title="Colocar Bandera Checkpoint (B)">🚩</button>
       <button class="t-btn" id="tSwap" title="Acción Jeff / Relevo (Q)">🪨</button>
-      <button class="t-btn" id="tGrab" title="Anclarse / Piolet (S / ▼)">⛏️</button>
+      <button class="t-btn" id="tGrab" title="Anclarse / Piolet / Panzazo (S / ▼)">⛏️</button>
       <button class="t-btn t-btn-jump" id="tJump" title="Saltar (W / ▲)">▲</button>
     </div>
   </div>
@@ -171,9 +174,9 @@
       </div>
 
       <div class="ctrl-bar">
-        <span><b style="color:var(--blue)">Pingo:</b> <span class="kbd">A</span><span class="kbd">D</span> Mover · <span class="kbd">W</span> Saltar · <span class="kbd">S</span> Anclar/Piolet</span>
-        <span><b style="color:var(--orange)">Fredo / Jeff:</b> <span class="kbd">←</span><span class="kbd">→</span> Mover · <span class="kbd">↑</span> Saltar · <span class="kbd">↓</span> Anclar</span>
-        <span><b style="color:var(--green)">Acciones:</b> <span class="kbd">C</span> Cuenta atrás 3-2-1 · <span class="kbd">R</span> Polea · <span class="kbd">B</span> Bandera · <span class="kbd">F</span> Pantalla completa</span>
+        <span><b style="color:var(--blue)">Pingo:</b> <span class="kbd">A</span><span class="kbd">D</span> Mover · <span class="kbd">W</span> Saltar · <span class="kbd">S</span> Anclar / Piolet / Panzazo (en carrera)</span>
+        <span><b style="color:var(--orange)">Fredo / Jeff:</b> <span class="kbd">←</span><span class="kbd">→</span> Mover · <span class="kbd">↑</span> Saltar · <span class="kbd">↓</span> Anclar / Panzazo</span>
+        <span><b style="color:var(--green)">Acciones:</b> <span class="kbd">E</span> Chocar los cinco · <span class="kbd">C</span> Cuenta atrás · <span class="kbd">S+W</span> A caballito/Lanzar · <span class="kbd">R</span> Polea · <span class="kbd">B</span> Bandera</span>
       </div>
 
       <div class="menu-footer">

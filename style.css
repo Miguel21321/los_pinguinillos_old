@@ -33,9 +33,13 @@ html, body {
   display: block;
   width: 100vw;
   height: 100vh;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: -webkit-crisp-edges;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
-/* ================= AVISO DE VIENTO ================= */
+/* ================= AVISO DE VIENTO Y TELEMETRÍA ================= */
 .wind-banner {
   position: fixed;
   top: 72px;
@@ -54,6 +58,31 @@ html, body {
   animation: windPulse 0.45s infinite alternate;
   pointer-events: none;
   transition: opacity 0.25s ease;
+}
+
+.fall-banner {
+  position: fixed;
+  top: 115px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, rgba(220, 38, 38, 0.94), rgba(185, 28, 28, 0.95));
+  border: 1.5px solid #fca5a5;
+  color: #fff;
+  padding: 8px 24px;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  z-index: 55;
+  box-shadow: 0 6px 26px rgba(220, 38, 38, 0.55);
+  pointer-events: none;
+  animation: fallDrop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: opacity 0.3s ease;
+}
+
+@keyframes fallDrop {
+  0% { transform: translateX(-50%) translateY(-18px) scale(0.85); opacity: 0; }
+  100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; }
 }
 
 @keyframes windPulse {

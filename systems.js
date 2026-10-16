@@ -316,6 +316,53 @@
       this.tone(85, 0.35, 'sawtooth', 0.035);
     },
 
+    // NUEVO: Voces procedimentales de pingüino (Bread & Fred squeaks)
+    squeak(type = 'jump') {
+      if (this.muted) return;
+      const ctx = this.ensureCtx();
+      if (!ctx) return;
+      const t = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      if (type === 'jump') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(480, t);
+        osc.frequency.exponentialRampToValueAtTime(740, t + 0.07);
+        gain.gain.setValueAtTime(0.04, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.08);
+      } else if (type === 'panic') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(620, t);
+        osc.frequency.exponentialRampToValueAtTime(320, t + 0.16);
+        gain.gain.setValueAtTime(0.035, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      } else if (type === 'grunt') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(260, t);
+        osc.frequency.exponentialRampToValueAtTime(180, t + 0.09);
+        gain.gain.setValueAtTime(0.045, t);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      } else if (type === 'highFive') {
+        this.tone(880, 0.18, 'triangle', 0.05);
+        this.tone(1318.5, 0.25, 'sine', 0.045, 0.05);
+        return;
+      }
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + 0.2);
+    },
+
+    slide() {
+      this.tone(160, 0.06, 'sine', 0.02);
+    },
+
+    skid() {
+      this.tone(110, 0.08, 'sawtooth', 0.03);
+    },
+
     // Música ambiental alpina procedimental
     playMusicTone(freq, dur, type, vol) {
       const ctx = this.ctx;
@@ -405,12 +452,14 @@
     swapHit: false,
     ropePullP1: false,
     ropePullP2: false,
+    emoteHitP1: false,
+    emoteHitP2: false,
 
     init() {
       const controls = new Set([
         'a', 'd', 'w', 's',
         'arrowleft', 'arrowright', 'arrowup', 'arrowdown',
-        'c', 'r', 'b', 'q'
+        'c', 'r', 'b', 'q', 'e', 'o', 'k', ' '
       ]);
 
       window.addEventListener('keydown', e => {
@@ -423,6 +472,14 @@
           else this.customFlagHit = true;
         }
         if (k === 'q' && !e.repeat) this.swapHit = true;
+        if (k === 'e' && !e.repeat) {
+          this.emoteHitP1 = true;
+          if (window.Game) Game.triggerEmote(1);
+        }
+        if ((k === 'o' || k === 'k') && !e.repeat) {
+          this.emoteHitP2 = true;
+          if (window.Game) Game.triggerEmote(2);
+        }
 
         this.keys.add(k);
         Sfx.startAmbientMusic();
@@ -468,16 +525,26 @@
       document.getElementById('tCd')?.addEventListener('click', () => { this.countdownHit = true; });
       document.getElementById('tFlag')?.addEventListener('click', () => { this.customFlagHit = true; });
       document.getElementById('tSwap')?.addEventListener('click', () => { this.swapHit = true; });
+      document.getElementById('tEmote')?.addEventListener('click', () => {
+        this.emoteHitP1 = true;
+        if (window.Game) Game.triggerEmote(1);
+      });
+      document.getElementById('btnEmote')?.addEventListener('click', () => {
+        this.emoteHitP1 = true;
+        if (window.Game) Game.triggerEmote(1);
+      });
     },
 
-    command(leftKey, rightKey, jumpKey, grabKey, pullKey) {
+    command(leftKey, rightKey, jumpKey, grabKey, pullKey, downKey, emoteKey) {
       const has = k => Array.isArray(k) ? k.some(key => this.keys.has(key)) : this.keys.has(k);
       return {
         left: has(leftKey),
         right: has(rightKey),
         jump: has(jumpKey),
         grab: has(grabKey),
-        ropePull: has(pullKey)
+        ropePull: has(pullKey),
+        down: downKey ? has(downKey) : has(grabKey),
+        emote: emoteKey ? has(emoteKey) : false
       };
     },
 
@@ -485,27 +552,27 @@
       if (mode === 'online') {
         if (Net.role === 'guest') {
           return {
-            p1: this.command('a', 'd', 'w', 's', 'r'),
-            p2: { left: false, right: false, jump: false, grab: false, ropePull: false }
+            p1: this.command('a', 'd', 'w', 's', 'r', 's', 'e'),
+            p2: { left: false, right: false, jump: false, grab: false, ropePull: false, down: false, emote: false }
           };
         }
         return {
-          p1: this.command('a', 'd', 'w', 's', 'r'),
-          p2: guestInput || { left: false, right: false, jump: false, grab: false, ropePull: false }
+          p1: this.command('a', 'd', 'w', 's', 'r', 's', 'e'),
+          p2: guestInput || { left: false, right: false, jump: false, grab: false, ropePull: false, down: false, emote: false }
         };
       }
 
       if (mode === 'solo') {
         return {
-          p1: this.command('a', 'd', 'w', 's', 'r'),
-          p2: { left: false, right: false, jump: false, grab: false, ropePull: false }
+          p1: this.command('a', 'd', 'w', 's', 'r', 's', 'e'),
+          p2: { left: false, right: false, jump: false, grab: false, ropePull: false, down: false, emote: false }
         };
       }
 
-      // Cooperativo Local: P1 en WASD + R, P2 en Flechas + [Shift, Enter, L, R]
+      // Cooperativo Local: P1 en WASD + R + E, P2 en Flechas + [Shift, Enter, L, R] + O
       return {
-        p1: this.command('a', 'd', 'w', 's', 'r'),
-        p2: this.command('arrowleft', 'arrowright', 'arrowup', 'arrowdown', ['r', 'shift', 'enter', 'l'])
+        p1: this.command('a', 'd', 'w', 's', 'r', 's', 'e'),
+        p2: this.command('arrowleft', 'arrowright', 'arrowup', 'arrowdown', ['r', 'shift', 'enter', 'l'], 'arrowdown', ['o', 'k', '1', 'end', '.'])
       };
     }
   };
@@ -572,12 +639,14 @@
           if (data.type === 'flag' && window.Game) Game.placeCustomFlag();
           if (data.type === 'clearflag' && window.Game) Game.clearCustomFlag();
           if (data.type === 'tp' && window.Game) Game.teleportToFlag();
+          if (data.type === 'emote' && window.Game) Game.triggerEmote(2);
         }
 
         // Estado del mundo recibido en el Huésped desde el Anfitrión Autoridad
         if (this.role === 'guest') {
           if (data.type === 'st' && window.Game) Game.applyNet(data);
           if (data.type === 'win' && window.Game) Game.onWin(true);
+          if (data.type === 'emote' && window.Game) Game.triggerEmote(data.p);
         }
       });
 
@@ -657,6 +726,7 @@
     shakeT: 0,
     shakeMag: 0,
     lookAheadY: 0,
+    hitStopT: 0,
 
     init(x, y) {
       this.x = x;
@@ -666,6 +736,11 @@
       this.shakeT = 0;
       this.shakeMag = 0;
       this.lookAheadY = 0;
+      this.hitStopT = 0;
+    },
+
+    hitStop(duration = 0.045) {
+      this.hitStopT = duration;
     },
 
     shake(mag = 12, duration = 0.4) {
